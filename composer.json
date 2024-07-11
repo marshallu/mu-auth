@@ -1,6 +1,7 @@
 {
-	"name": "marshall-u/mu-auth",
+	"name": "marshallu/mu-auth",
 	"type": "wordpress-plugin",
+	"keywords": ["wordpress", "plugin"],
 	"version": "1.0.0",
     "require-dev": {
         "paulthewalton/acf-pro-stubs": "5.8.9.1",
