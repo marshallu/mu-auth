@@ -2,6 +2,8 @@
 	"name": "marshallu/mu-auth",
 	"type": "wordpress-plugin",
 	"keywords": ["wordpress", "plugin"],
+	"description": "MU Auth is a WordPress plugin that provides a simple way to authenticate users against the Marshall University SSO.",
+	"license": "MIT",
     "require-dev": {
         "php-stubs/acf-pro-stubs": "^6.0",
 		"squizlabs/php_codesniffer": "@stable",
