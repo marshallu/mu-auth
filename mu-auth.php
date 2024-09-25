@@ -10,14 +10,14 @@
  * @package         MU_Auth
  */
 
-// const MUCASAUTH_CAS_HOST = 'https://marshall-temp-bridge.proxy.cirrusidentity.com'; // include http(s).
-const MUCASAUTH_CAS_HOST = 'https://auth.marshall.edu'; // include http(s)
-const MUCASAUTH_CAS_PATH = '/cas';
-const MUCASAUTH_LOGOUT_REDIRECT_URL = 'https://www.marshall.edu';
-const MUCASAUTH_CAS_ATTRIBUTE_GROUPS = 'groups';
+// Define constants.
+const MUCASAUTH_CAS_HOST                = 'https://auth.marshall.edu';
+const MUCASAUTH_CAS_PATH                = '/cas';
+const MUCASAUTH_LOGOUT_REDIRECT_URL     = 'https://www.marshall.edu';
+const MUCASAUTH_CAS_ATTRIBUTE_GROUPS    = 'groups';
 const MUCASAUTH_CAS_ATTRIBUTE_FIRSTNAME = 'firstname';
-const MUCASAUTH_CAS_ATTRIBUTE_LASTNAME = 'lastname';
-const MUCASAUTH_CAS_ATTRIBUTE_EMAIL = 'email';
+const MUCASAUTH_CAS_ATTRIBUTE_LASTNAME  = 'lastname';
+const MUCASAUTH_CAS_ATTRIBUTE_EMAIL     = 'email';
 
 if ( ! class_exists( 'ACF' ) ) {
 	return new WP_Error( 'broke', __( 'Advanced Custom Fields is required for this plugin.', 'mu-moments' ) );
@@ -48,7 +48,7 @@ register_deactivation_hook( __FILE__, 'mu_auth_deactivate' );
  * @return void
  */
 function mu_auth_logout_redirect() {
-	wp_redirect( 'https://www.marshall.edu' );
+	wp_safe_redirect( 'https://www.marshall.edu' );
 	exit;
 }
 add_action( 'wp_logout', 'mu_auth_logout_redirect' );
@@ -59,8 +59,8 @@ add_action( 'wp_logout', 'mu_auth_logout_redirect' );
  * @return boolean
  */
 function mu_auth_is_wordpress_admin_login() {
-	$current_url = trim( $_SERVER['REQUEST_URI'], '/' );
-	return ( strpos( $current_url, 'wp-login.php' ) !== false && strpos( $current_url, 'action=logout' ) === false && strpos( $current_url, 'action=postpass' ) === false);
+	$current_url = trim( $_SERVER['REQUEST_URI'], '/' ); // phpcs:ignore
+	return ( strpos( $current_url, 'wp-login.php' ) !== false && strpos( $current_url, 'action=logout' ) === false && strpos( $current_url, 'action=postpass' ) === false );
 }
 
 /**
@@ -87,7 +87,7 @@ function mu_auth_login_user() {
 	);
 
 	// Allow users in $supers array to access site.
-	if ( in_array( $auth_data['user'], $supers ) ) {
+	if ( in_array( $auth_data['user'], $supers, true ) ) {
 		$site_access_allowed = true;
 	}
 
@@ -103,22 +103,22 @@ function mu_auth_login_user() {
 
 	if ( $site_users && is_array( $site_users ) ) {
 		foreach ( $site_users as $site_user ) {
-			if ( $auth_data['user'] == trim( $site_user['munet'] ) ) {
+			if ( $auth_data['user'] == trim( $site_user['munet'] ) ) { // phpcs:ignore
 				$site_access_allowed = true;
-				$selected_user = $site_user;
+				$selected_user = $site_user; // phpcs:ignore
 			}
 		}
 	}
 
 	// Redirect invalid user to homepage.
-	if ( ! $site_access_allowed) {
-		wp_redirect( MUCASAUTH_LOGOUT_REDIRECT_URL . '/?error_code=1' );
+	if ( ! $site_access_allowed ) {
+		wp_safe_redirect( MUCASAUTH_LOGOUT_REDIRECT_URL . '/?error_code=1' );
 		exit;
 	}
 
 	// If no WordPress user is found, create a new WordPress user.
 	if ( ! $user ) {
-		if ( 'v_VitalDesign' == $auth_data['user'] ) {
+		if ( 'v_VitalDesign' === $auth_data['user'] ) {
 			$user = mu_auth_create_user(
 				$auth_data['user'],
 				'Vital',
@@ -130,17 +130,17 @@ function mu_auth_login_user() {
 		} else {
 			$user = mu_auth_create_user(
 				$auth_data['user'],
-				$auth_data['attributes'][MUCASAUTH_CAS_ATTRIBUTE_FIRSTNAME],
-				$auth_data['attributes'][MUCASAUTH_CAS_ATTRIBUTE_LASTNAME],
-				$auth_data['attributes'][MUCASAUTH_CAS_ATTRIBUTE_EMAIL],
-				$selected_user['permissions_level'] ?: 'administrator',
+				$auth_data['attributes'][ MUCASAUTH_CAS_ATTRIBUTE_FIRSTNAME ],
+				$auth_data['attributes'][ MUCASAUTH_CAS_ATTRIBUTE_LASTNAME ],
+				$auth_data['attributes'][ MUCASAUTH_CAS_ATTRIBUTE_EMAIL ],
+				$selected_user['permissions_level'] ? $selected_user['permissions_level'] : 'administrator',
 				$selected_user,
 			);
 		}
 
 		// Check for valid created WordPress user.
 		if ( ! $user ) {
-			wp_redirect( MUCASAUTH_LOGOUT_REDIRECT_URL . '/?error_code=2' );
+			wp_safe_redirect( MUCASAUTH_LOGOUT_REDIRECT_URL . '/?error_code=2' );
 			exit;
 		}
 	}
@@ -167,15 +167,16 @@ function mu_auth_login_user() {
 /**
  * Create a new WordPress user.
  *
- * @param string $username
- * @param string $first_name
- * @param string $last_name
- * @param string $email
- * @param string $role
+ * @param string $username The username of the user.
+ * @param string $first_name The user's first name.
+ * @param string $last_name The user's last name.
+ * @param string $email The user's email address.
+ * @param string $role The role of the user.
+ *
  * @return WP_User|boolean
  */
-function mu_auth_create_user( $username, $first_name, $last_name, $email, $role, $selected_user ) {
-	$userData = array(
+function mu_auth_create_user( $username, $first_name, $last_name, $email, $role ) {
+	$user_data = array(
 		'user_pass'     => md5( microtime() ),
 		'user_login'    => $username,
 		'user_nicename' => $username,
@@ -183,10 +184,10 @@ function mu_auth_create_user( $username, $first_name, $last_name, $email, $role,
 		'display_name'  => $first_name . ' ' . $last_name,
 		'first_name'    => $first_name,
 		'last_name'     => $last_name,
-		'role'          => $role
+		'role'          => $role,
 	);
 
-	$user = wp_insert_user( $userData );
+	$user = wp_insert_user( $user_data );
 
 	if ( is_wp_error( $user ) ) {
 		return false;
@@ -196,29 +197,10 @@ function mu_auth_create_user( $username, $first_name, $last_name, $email, $role,
 }
 
 /**
- * Check if the user is whitelisted for the site.
- *
- * @param array $user_groups
- * @param array $whitelisted_groups
- * @return boolean
- */
-function mu_auth_is_user_whitelisted_for_site( $user_groups, $whitelisted_groups ) {
-	$user_groups = array_map( 'strtolower', $user_groups );
-	$user_groups = array_map( 'trim', $user_groups );
-
-	foreach ( $whitelisted_groups as $whitelisted_group ) {
-		if ( in_array( strtolower( trim( $whitelisted_group ) ), $user_groups ) ) {
-			return true;
-		}
-	}
-
-	return false;
-}
-
-/**
  * Get the user by username.
  *
- * @param string $username
+ * @param string $username The username of the user.
+ *
  * @return WP_User
  */
 function mu_auth_get_user_by_username( $username ) {
@@ -233,7 +215,7 @@ function mu_auth_get_user_by_username( $username ) {
 function mu_auth_authenticate() {
 	if ( ! mu_auth_is_ticket_present() ) {
 		$login_url = mu_auth_get_login_url( MUCASAUTH_CAS_HOST, MUCASAUTH_CAS_PATH );
-		wp_redirect( $login_url );
+		wp_redirect( $login_url ); // phpcs:ignore
 		exit;
 	}
 
@@ -241,15 +223,15 @@ function mu_auth_authenticate() {
 
 	if ( ! $ticket ) {
 		$login_url = mu_auth_get_login_url( MUCASAUTH_CAS_HOST, MUCASAUTH_CAS_PATH );
-		wp_redirect( $login_url );
+		wp_redirect( $login_url ); // phpcs:ignore
 		exit;
 	}
 
-	$cas_response = mu_auth_validate_cas_ticket( MUCASAUTH_CAS_HOST, MUCASAUTH_CAS_PATH, $ticket );
+	$cas_response = (object) mu_auth_validate_cas_ticket( MUCASAUTH_CAS_HOST, MUCASAUTH_CAS_PATH, $ticket );
 
 	if ( ! isset( $cas_response->authenticationSuccess ) ) { // phpcs:ignore
 		$login_url = mu_auth_get_login_url( MUCASAUTH_CAS_HOST, MUCASAUTH_CAS_PATH );
-		wp_redirect( $login_url );
+		wp_redirect( $login_url ); // phpcs:ignore
 		exit;
 	}
 
@@ -262,9 +244,9 @@ function mu_auth_authenticate() {
 /**
  * Validate the CAS ticket.
  *
- * @param string $cas_host
- * @param string $cas_path
- * @param string $ticket
+ * @param string $cas_host The CAS host.
+ * @param string $cas_path The CAS path.
+ * @param string $ticket The CAS ticket.
  * @return array
  */
 function mu_auth_validate_cas_ticket( $cas_host, $cas_path, $ticket ) {
@@ -274,17 +256,17 @@ function mu_auth_validate_cas_ticket( $cas_host, $cas_path, $ticket ) {
 	$xml = simplexml_load_string( $data['body'] );
 	$xml = $xml->children( 'http://www.yale.edu/tp/cas' );
 
-	$json = json_encode( $xml );
+	$json = wp_json_encode( $xml );
 
-	return json_decode( $json, false);
+	return json_decode( $json, false );
 }
 
 /**
  * Get the validation URL.
  *
- * @param string $cas_host
- * @param string $cas_path
- * @param string $ticket
+ * @param string $cas_host The CAS host.
+ * @param string $cas_path The CAS path.
+ * @param string $ticket The CAS ticket.
  * @return string
  */
 function mu_auth_get_validation_url( $cas_host, $cas_path, $ticket ) {
@@ -298,7 +280,7 @@ function mu_auth_get_validation_url( $cas_host, $cas_path, $ticket ) {
  * @return string|boolean
  */
 function mu_auth_get_ticket() {
-	parse_str( $_SERVER['QUERY_STRING'], $query_string_parts );
+	parse_str( $_SERVER['QUERY_STRING'], $query_string_parts ); // phpcs:ignore
 
 	if ( ! isset( $query_string_parts['ticket'] ) ) {
 		return false;
@@ -329,21 +311,21 @@ function mu_auth_get_service_url() {
 		$scheme = 'https';
 	}
 
-	$current_url = $scheme . '://' . trim($_SERVER['HTTP_HOST'], '/') . '/' . ltrim($_SERVER['REQUEST_URI'], '/');
+	$current_url = $scheme . '://' . trim($_SERVER['HTTP_HOST'], '/') . '/' . ltrim($_SERVER['REQUEST_URI'], '/'); // phpcs:ignore
 
-	return urlencode( urldecode( $current_url ) );
+	return rawurlencode( urldecode( $current_url ) );
 }
 
 /**
  * Get the login URL.
  *
- * @param string $cas_host
- * @param string $cas_path
+ * @param string $cas_host The CAS host.
+ * @param string $cas_path The CAS path.
  * @return string
  */
 function mu_auth_get_login_url( $cas_host, $cas_path ) {
 	$service_url = mu_auth_get_service_url_without_ticket();
-	return trim ( $cas_host, '/' ) . $cas_path . '/login?service=' . $service_url;
+	return trim( $cas_host, '/' ) . $cas_path . '/login?service=' . $service_url;
 }
 
 /**
@@ -355,7 +337,7 @@ function mu_auth_get_service_url_without_ticket() {
 	$service_url = mu_auth_get_service_url();
 	$service_url = urldecode( $service_url );
 
-	$service_url_parts = parse_url( $service_url );
+	$service_url_parts = wp_parse_url( $service_url );
 	parse_str( $service_url_parts['query'], $query_string_parts );
 
 	$query_string = '?';
@@ -367,7 +349,7 @@ function mu_auth_get_service_url_without_ticket() {
 
 	$query_string = rtrim( $query_string, '&' );
 
-	return urlencode( $service_url_parts['scheme'] . '://' . $service_url_parts['host'] . $service_url_parts['path'] . $query_string );
+	return rawurlencode( $service_url_parts['scheme'] . '://' . $service_url_parts['host'] . $service_url_parts['path'] . $query_string );
 }
 
 /**
@@ -380,8 +362,8 @@ function mu_auth_check_login() {
 		return;
 	}
 
-	// Check for wordpress login page or authenticated user without a blog role.
-	if ( mu_auth_is_wordpress_admin_login() || is_admin() && is_user_logged_in() && ! is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) ) {
+	// Check for WordPress login page or authenticated user without a blog role.
+	if ( mu_auth_is_wordpress_admin_login() || is_admin() && is_user_logged_in() && ! is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) ) { // phpcs:ignore
 		// Remove existing authentication hook.
 		remove_filter( 'authenticate', 'wp_authenticate_username_password', 20, 3 );
 
