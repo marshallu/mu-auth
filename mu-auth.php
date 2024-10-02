@@ -133,7 +133,7 @@ function mu_auth_login_user() {
 				$auth_data['attributes'][ MUCASAUTH_CAS_ATTRIBUTE_FIRSTNAME ],
 				$auth_data['attributes'][ MUCASAUTH_CAS_ATTRIBUTE_LASTNAME ],
 				$auth_data['attributes'][ MUCASAUTH_CAS_ATTRIBUTE_EMAIL ],
-				$selected_user['permissions_level'] ? $selected_user['permissions_level'] : 'administrator',
+				$selected_user['permissions_level'] ? strtolower( $selected_user['permissions_level'] ) : 'administrator',
 				$selected_user,
 			);
 		}
