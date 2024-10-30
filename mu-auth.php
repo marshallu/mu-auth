@@ -84,6 +84,9 @@ function mu_auth_login_user() {
 		'bajus',
 		'madden24',
 		'traube3',
+		'schmidt29',
+		'lauhon2',
+		'burwellb',
 	);
 
 	// Allow users in $supers array to access site.
