@@ -5,6 +5,12 @@
  * @package MU_Auth
  */
 
+if ( is_multisite() ) {
+	$capability = 'manage_sites';
+} else {
+	$capability = 'manage_options';
+}
+
 /**
  * Add the options page to the settings menu.
  */
@@ -14,7 +20,7 @@ if ( function_exists( 'acf_add_options_page' ) ) {
 			'page_title'  => 'MU Auth Settings',
 			'menu_title'  => 'MU Auth Settings',
 			'parent_slug' => 'options-general.php',
-			'capability'  => 'manage_sites',
+			'capability'  => $capability,
 		)
 	);
 }
