@@ -60,7 +60,11 @@ add_action( 'wp_logout', 'mu_auth_logout_redirect' );
  */
 function mu_auth_is_wordpress_admin_login() {
 	$current_url = trim( $_SERVER['REQUEST_URI'], '/' ); // phpcs:ignore
-	return ( strpos( $current_url, 'wp-login.php' ) !== false && strpos( $current_url, 'action=logout' ) === false && strpos( $current_url, 'action=postpass' ) === false );
+	return (
+		( strpos( $current_url, 'wp-login.php' ) !== false || strpos( $current_url, 'evergreen' ) !== false )
+		&& strpos( $current_url, 'action=logout' ) === false
+		&& strpos( $current_url, 'action=postpass' ) === false
+	);
 }
 
 /**
@@ -79,15 +83,7 @@ function mu_auth_login_user() {
 	$site_access_allowed = false;
 
 	$supers = array(
-		'cmccomas',
-		'davis220',
-		'bajus',
-		'madden24',
-		'traube3',
-		'schmidt29',
-		'lauhon2',
-		'burwellb',
-		'smith566',
+		'username',
 	);
 
 	// Allow users in $supers array to access site.
