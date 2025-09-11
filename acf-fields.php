@@ -170,7 +170,7 @@ add_action( 'acf/include_fields', function() {
 			array(
 				'param' => 'options_page',
 				'operator' => '==',
-				'value' => 'profile-display-settings',
+				'value' => 'acf-options-mu-auth-settings',
 			),
 		),
 	),
