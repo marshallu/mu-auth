@@ -70,6 +70,7 @@ add_action( 'acf/include_fields', function() {
 						'Administrator' => 'Administrator',
 						'Editor' => 'Editor',
 						'Forms' => 'Forms',
+						'Profiles' => 'Profiles',
 					),
 					'default_value' => 'Administrator',
 					'return_format' => 'value',
