@@ -605,7 +605,7 @@ function mu_auth_init_gravity_forms_viewer() {
 
 // Initialize the Gravity Forms Viewer functionality.
 add_action( 'init', 'mu_auth_init_gravity_forms_viewer' );
-< ? php
+
 /**
  * Profiles Role functionality for MU Auth plugin.
  *
