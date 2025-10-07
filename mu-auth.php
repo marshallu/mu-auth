@@ -875,9 +875,17 @@ function mu_auth_restrict_admin_access_for_profiles_manager() {
 
 		if ( 'post-new.php' === $pagenow || 'edit.php' === $pagenow ) {
 			$post_type = isset( $_GET['post_type'] ) ? sanitize_text_field( wp_unslash( $_GET['post_type'] ) ) : 'post'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		} elseif ( 'post.php' === $pagenow && isset( $_GET['post'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$post_id   = intval( $_GET['post'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$post_type = get_post_type( $post_id );
+		} elseif ( 'post.php' === $pagenow ) {
+			// Check GET parameter first (for viewing/editing).
+			if ( isset( $_GET['post'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				$post_id   = intval( $_GET['post'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				$post_type = get_post_type( $post_id );
+			} elseif ( isset( $_POST['post_ID'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				$post_id   = intval( $_POST['post_ID'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				$post_type = get_post_type( $post_id );
+			} elseif ( ! empty( $typenow ) ) {
+				$post_type = $typenow;
+			}
 		}
 
 		if ( 'employee' !== $post_type ) {
