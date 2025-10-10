@@ -385,11 +385,7 @@ function mu_auth_check_login() {
 	}
 }
 
-$is_production = ( isset( $_ENV['PANTHEON_ENVIRONMENT'] ) ) || 'development' !== ( isset( $_ENV['WP_ENV'] ) && $_ENV['WP_ENV'] ); // phpcs:ignore
-
-if ( $is_production ) {
-	add_action( 'init', 'mu_auth_check_login' );
-}
+add_action( 'init', 'mu_auth_check_login' );
 
 /**
  * Gravity Forms Viewer Role functionality for MU Auth plugin.
