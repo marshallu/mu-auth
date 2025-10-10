@@ -368,7 +368,7 @@ function mu_auth_get_service_url_without_ticket() {
  */
 function mu_auth_check_login() {
 	// User is logged in and has proper access - let them through.
-	if ( is_admin() && is_user_logged_in() && ( is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) || is_super_admin() ) ) {
+	if ( is_user_logged_in() && ( is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) || is_super_admin() ) ) {
 		return;
 	}
 
@@ -382,7 +382,7 @@ function mu_auth_check_login() {
 	}
 
 	// Handle authenticated user without blog role.
-	if ( is_admin() && is_user_logged_in() && ! is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) && ! is_super_admin() ) {
+	if ( is_user_logged_in() && ! is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) && ! is_super_admin() ) {
 		remove_filter( 'authenticate', 'wp_authenticate_username_password', 20, 3 );
 		mu_auth_login_user();
 	}
