@@ -61,7 +61,12 @@ add_action( 'wp_logout', 'mu_auth_logout_redirect' );
 function mu_auth_is_wordpress_admin_login() {
 	$current_url = trim( $_SERVER['REQUEST_URI'], '/' ); // phpcs:ignore
 	return (
-		( strpos( $current_url, 'wp-login.php' ) !== false || strpos( $current_url, 'evergreen' ) !== false )
+		(
+			strpos( $current_url, 'wp-login.php' ) !== false ||
+			strpos( $current_url, 'wp-admin' ) !== false ||
+			strpos( $current_url, 'wp/wp-admin' ) !== false ||
+			strpos( $current_url, 'evergreen' ) !== false
+		)
 		&& strpos( $current_url, 'action=logout' ) === false
 		&& strpos( $current_url, 'action=postpass' ) === false
 	);
