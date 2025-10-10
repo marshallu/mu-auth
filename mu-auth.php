@@ -271,10 +271,14 @@ function mu_auth_validate_cas_ticket( $cas_host, $cas_path, $ticket ) {
 
 	mu_auth_debug_log( 'validate_cas_ticket: Calling CAS', array( // phpcs:ignore
 		'validation_url' => $validation_url, // phpcs:ignore
-		'decoded_validation_url' => urldecode( $validation_url ),
 	)); // phpcs:ignore
 
-	$response = wp_remote_get( $validation_url );
+	// Increase timeout and ensure we get the full response.
+	$response = wp_remote_get( $validation_url, array( // phpcs:ignore
+		'timeout'     => 30,
+		'httpversion' => '1.1',
+		'sslverify'   => true,
+	) ); // phpcs:ignore
 
 	if ( is_wp_error( $response ) ) {
 		mu_auth_debug_log( 'validate_cas_ticket: WP Error', array( 'error' => $response->get_error_message() ) );
@@ -289,22 +293,40 @@ function mu_auth_validate_cas_ticket( $cas_host, $cas_path, $ticket ) {
 	}
 
 	$body = wp_remote_retrieve_body( $response );
-	mu_auth_debug_log( 'validate_cas_ticket: Response body', array( 'body' => substr( $body, 0, 500 ) ) );
+
+	// Log the full body length.
+	mu_auth_debug_log( 'validate_cas_ticket: Body length', array( // phpcs:ignore
+		'length' => strlen( $body ), // phpcs:ignore
+		'first_100' => substr( $body, 0, 100 ),// phpcs:ignore
+		'last_100' => substr( $body, -100 ), // phpcs:ignore
+	) ); // phpcs:ignore
 
 	if ( ! $body ) {
+		mu_auth_debug_log( 'validate_cas_ticket: Empty body' );
 		return (object) array();
 	}
 
-	$xml = @simplexml_load_string( $body ); // phpcs:ignore
-	if ( ! $xml ) {
-		mu_auth_debug_log( 'validate_cas_ticket: Failed to parse XML' );
+	// Suppress XML errors and enable libxml error handling.
+	libxml_use_internal_errors( true );
+	$xml = simplexml_load_string( $body );
+
+	if ( false === $xml ) {
+		$errors = libxml_get_errors();
+		mu_auth_debug_log( 'validate_cas_ticket: Failed to parse XML', array( // phpcs:ignore
+			'xml_errors' => print_r( $errors, true ), // phpcs:ignore
+			'body_length' => strlen( $body ),
+		) ); // phpcs:ignore
+		libxml_clear_errors();
 		return (object) array();
 	}
 
 	$xml = $xml->children( 'http://www.yale.edu/tp/cas' );
 
 	$result = json_decode( wp_json_encode( $xml ), false );
-	mu_auth_debug_log( 'validate_cas_ticket: Parsed result', array( 'result' => print_r( $result, true ) ) ); // phpcs:ignore
+	mu_auth_debug_log( 'validate_cas_ticket: Success!', array( // phpcs:ignore
+		'has_user' => isset( $result->authenticationSuccess->user ), // phpcs:ignore
+		'user' => $result->authenticationSuccess->user  ?? 'not found', // phpcs:ignore
+	) ); // phpcs:ignore
 
 	return $result;
 }
