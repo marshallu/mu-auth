@@ -407,7 +407,7 @@ function mu_auth_check_login() {
 	file_put_contents( $log_file, "=== END ===\n\n", FILE_APPEND ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 }
 
-$is_production = ( isset( $_ENV['PANTHEON_ENVIRONMENT'] ) ) || ( 'development' !== isset( $_ENV['WP_ENV'] ) && $_ENV['WP_ENV'] ); // phpcs:ignore
+$is_production = true;
 
 if ( $is_production ) {
 	add_action( 'init', 'mu_auth_check_login' );
