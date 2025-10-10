@@ -380,7 +380,7 @@ function mu_auth_check_login() {
 	}
 }
 
-if ( isset( $_ENV['PANTHEON_ENVIRONMENT'] ) ) {
+if ( isset( $_ENV['PANTHEON_ENVIRONMENT'] ) || getenv( 'MU_AUTH_ENABLE' ) ) {
 	add_action( 'init', 'mu_auth_check_login' );
 }
 
