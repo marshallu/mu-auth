@@ -375,22 +375,23 @@ function mu_auth_is_https_request() {
 }
 
 /**
- * Get the service URL.
+ * Get the service URL - always force HTTPS for security.
  *
  * @return string
  */
 function mu_auth_get_service_url() {
-	$scheme = mu_auth_is_https_request() ? 'https' : 'http';
+	// Always use HTTPS for security.
+	$scheme = 'https';
 
 	// Prefer forwarded host if present (behind proxy/load balancer).
 	$host = '';
-	if ( ! empty( $_SERVER['HTTP_X_FORWARDED_HOST'] ) ) { // phpcs:ignore
+	if ( ! empty( $_SERVER['HTTP_X_FORWARDED_HOST'] ) ) {
 		$host = trim( (string) $_SERVER['HTTP_X_FORWARDED_HOST'] ); // phpcs:ignore
 	} elseif ( ! empty( $_SERVER['HTTP_HOST'] ) ) { // phpcs:ignore
 		$host = trim( (string) $_SERVER['HTTP_HOST'] ); // phpcs:ignore
 	}
 
-	$uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '/'; // phpcs:ignore
+	$uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '/'; 	// phpcs:ignore
 
 	// Normalize path.
 	$url = $scheme . '://' . rtrim( $host, '/' ) . '/' . ltrim( $uri, '/' );
