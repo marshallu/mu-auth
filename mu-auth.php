@@ -91,12 +91,23 @@ function mu_auth_get_role_from_permissions_level( $permissions_level ) {
  *
  * @return void
  */
+/**
+ * Login the user via CAS.
+ *
+ * @return void
+ */
 function mu_auth_login_user() {
+	mu_auth_debug_log( 'login_user: Starting login process' );
+
 	// Authenticate the user via CAS.
 	$auth_data = mu_auth_authenticate();
 
+	mu_auth_debug_log( 'login_user: Got auth data', array( 'user' => $auth_data['user'] ) );
+
 	// Get username/MUNet to use below.
 	$user = mu_auth_get_user_by_username( $auth_data['user'] );
+
+	mu_auth_debug_log( 'login_user: Found WP user?', array( 'found' => $user ? 'yes' : 'no', 'user_id' => $user ? $user->ID : 'n/a' ) );  // phpcs:ignore
 
 	// By default site access is not allowed.
 	$site_access_allowed = false;
@@ -108,11 +119,13 @@ function mu_auth_login_user() {
 	// Allow users in $supers array to access site.
 	if ( in_array( $auth_data['user'], $supers, true ) ) {
 		$site_access_allowed = true;
+		mu_auth_debug_log( 'login_user: User is in supers array' );
 	}
 
 	// Allow WordPress super admins to access all sites.
 	if ( $user && is_super_admin( $user->ID ) ) {
 		$site_access_allowed = true;
+		mu_auth_debug_log( 'login_user: User is super admin' );
 	}
 
 	$selected_user = array();
@@ -120,23 +133,32 @@ function mu_auth_login_user() {
 	// Check if user is in the auth_users ACF field/option.
 	$site_users = get_field( 'auth_users', 'option' );
 
+	mu_auth_debug_log( 'login_user: Checking ACF auth_users', array(  // phpcs:ignore
+		'site_users_count' => is_array( $site_users ) ? count( $site_users ) : 0  // phpcs:ignore
+	) );  // phpcs:ignore
+
 	if ( $site_users && is_array( $site_users ) ) {
 		foreach ( $site_users as $site_user ) {
-			if ( $auth_data['user'] == trim( $site_user['munet'] ) ) { // phpcs:ignore
+			if ( $auth_data['user'] == trim( $site_user['munet'] ) ) {  // phpcs:ignore
 				$site_access_allowed = true;
-				$selected_user = $site_user; // phpcs:ignore
+				$selected_user = $site_user;  // phpcs:ignore
+				mu_auth_debug_log( 'login_user: User found in ACF auth_users' );
 			}
 		}
 	}
 
+	mu_auth_debug_log( 'login_user: Access allowed?', array( 'allowed' => $site_access_allowed ? 'yes' : 'no' ) );
+
 	// Redirect invalid user to homepage.
 	if ( ! $site_access_allowed ) {
+		mu_auth_debug_log( 'login_user: Access denied, redirecting to homepage' );
 		wp_safe_redirect( MUCASAUTH_LOGOUT_REDIRECT_URL . '/?error_code=1' );
 		exit;
 	}
 
 	// If no WordPress user is found, create a new WordPress user.
 	if ( ! $user ) {
+		mu_auth_debug_log( 'login_user: Creating new WordPress user' );
 		$role = $selected_user['permissions_level'] ? mu_auth_get_role_from_permissions_level( $selected_user['permissions_level'] ) : 'administrator';
 		$user = mu_auth_create_user(
 			$auth_data['user'],
@@ -148,28 +170,42 @@ function mu_auth_login_user() {
 
 		// Check for valid created WordPress user.
 		if ( ! $user ) {
+			mu_auth_debug_log( 'login_user: Failed to create WordPress user' );
 			wp_safe_redirect( MUCASAUTH_LOGOUT_REDIRECT_URL . '/?error_code=2' );
 			exit;
 		}
+
+		mu_auth_debug_log( 'login_user: WordPress user created', array( 'user_id' => $user->ID ) );
 	}
 
 	// Add WordPress user to blog/site if needed.
 	if ( $user && ! is_user_member_of_blog( $user->ID, get_current_blog_id() ) && ! is_super_admin( $user->ID ) ) {
+		mu_auth_debug_log( 'login_user: Adding user to blog' );
 		$role = $selected_user['permissions_level'] ? mu_auth_get_role_from_permissions_level( $selected_user['permissions_level'] ) : 'administrator';
 		add_user_to_blog( get_current_blog_id(), $user->ID, $role );
 	}
 
 	// Login WordPress user if needed.
 	if ( ! is_user_logged_in() ) {
+		mu_auth_debug_log( 'login_user: Logging user into WordPress', array( 'user_id' => $user->ID ) );
+
 		// Log WordPress user in.
 		wp_clear_auth_cookie();
 		wp_set_current_user( $user->ID );
 		wp_set_auth_cookie( $user->ID );
 
+		mu_auth_debug_log( 'login_user: WordPress login complete, checking if logged in', array( // phpcs:ignore
+			'is_logged_in' => is_user_logged_in() ? 'yes' : 'no',   // phpcs:ignore
+			'current_user_id' => get_current_user_id(),
+		) );  // phpcs:ignore
+
 		// Redirect to dashboard for blog/site.
 		$redirect_to = get_dashboard_url();
+		mu_auth_debug_log( 'login_user: Redirecting to dashboard', array( 'redirect_to' => $redirect_to ) );
 		wp_safe_redirect( $redirect_to );
 		exit;
+	} else {
+		mu_auth_debug_log( 'login_user: User already logged in, should not reach here' );
 	}
 }
 
