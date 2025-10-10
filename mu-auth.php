@@ -268,25 +268,45 @@ function mu_auth_authenticate() {
  */
 function mu_auth_validate_cas_ticket( $cas_host, $cas_path, $ticket ) {
 	$validation_url = mu_auth_get_validation_url( $cas_host, $cas_path, $ticket );
-	$response       = wp_remote_get( $validation_url );
 
-	if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+	mu_auth_debug_log( 'validate_cas_ticket: Calling CAS', array( // phpcs:ignore
+		'validation_url' => $validation_url, // phpcs:ignore
+		'decoded_validation_url' => urldecode( $validation_url ),
+	)); // phpcs:ignore
+
+	$response = wp_remote_get( $validation_url );
+
+	if ( is_wp_error( $response ) ) {
+		mu_auth_debug_log( 'validate_cas_ticket: WP Error', array( 'error' => $response->get_error_message() ) );
+		return (object) array();
+	}
+
+	$response_code = wp_remote_retrieve_response_code( $response );
+	mu_auth_debug_log( 'validate_cas_ticket: Response code', array( 'code' => $response_code ) );
+
+	if ( 200 !== $response_code ) {
 		return (object) array();
 	}
 
 	$body = wp_remote_retrieve_body( $response );
+	mu_auth_debug_log( 'validate_cas_ticket: Response body', array( 'body' => substr( $body, 0, 500 ) ) );
+
 	if ( ! $body ) {
 		return (object) array();
 	}
 
 	$xml = @simplexml_load_string( $body ); // phpcs:ignore
 	if ( ! $xml ) {
+		mu_auth_debug_log( 'validate_cas_ticket: Failed to parse XML' );
 		return (object) array();
 	}
 
 	$xml = $xml->children( 'http://www.yale.edu/tp/cas' );
 
-	return json_decode( wp_json_encode( $xml ), false );
+	$result = json_decode( wp_json_encode( $xml ), false );
+	mu_auth_debug_log( 'validate_cas_ticket: Parsed result', array( 'result' => print_r( $result, true ) ) ); // phpcs:ignore
+
+	return $result;
 }
 
 /**
