@@ -58,25 +58,13 @@ add_action( 'wp_logout', 'mu_auth_logout_redirect' );
  *
  * @return boolean
  */
-function mu_auth_is_wordpress_admin_login(): bool {
-	$req_uri = parse_url( $_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH ); // phpcs:ignore
-
-	// Normalize to compare paths only.
-	$login_path = parse_url( wp_login_url(), PHP_URL_PATH ); // phpcs:ignore
-	$admin_path = parse_url( admin_url(), PHP_URL_PATH ); // phpcs:ignore
-
-	$is_login = $login_path && str_starts_with( rtrim( $req_uri, '/' ), rtrim( $login_path, '/' ) );
-	$is_admin = $admin_path && str_starts_with( rtrim( $req_uri, '/' ), rtrim( $admin_path, '/' ) );
-
-	// Permit /?action=logout and /?action=postpass to pass through unchanged.
-	$qs = array();
-	parse_str( $_SERVER['QUERY_STRING'] ?? '', $qs); // phpcs:ignore
-	$is_logout_or_postpass = isset( $qs['action'] ) && in_array( $qs['action'], array( 'logout', 'postpass' ), true );
-
-	// Optional: keep your custom “evergreen” backdoor if you use it.
-	$has_evergreen = strpos( $_SERVER['REQUEST_URI'] ?? '', 'evergreen' ) !== false; // phpcs:ignore
-
-	return ( $is_login || $is_admin || $has_evergreen ) && ! $is_logout_or_postpass;
+function mu_auth_is_wordpress_admin_login() {
+	$current_url = trim( $_SERVER['REQUEST_URI'], '/' ); // phpcs:ignore
+	return (
+		( strpos( $current_url, 'wp-login.php' ) !== false || strpos( $current_url, 'evergreen' ) !== false )
+		&& strpos( $current_url, 'action=logout' ) === false
+		&& strpos( $current_url, 'action=postpass' ) === false
+	);
 }
 
 /**
@@ -178,7 +166,7 @@ function mu_auth_login_user() {
 		wp_set_auth_cookie( $user->ID );
 
 		// Redirect to dashboard for blog/site.
-		$redirect_to = admin_url();
+		$redirect_to = get_dashboard_url();
 		wp_safe_redirect( $redirect_to );
 		exit;
 	}
@@ -266,33 +254,20 @@ function mu_auth_authenticate() {
  *
  * @param string $cas_host The CAS host.
  * @param string $cas_path The CAS path.
- * @param string $ticket   The CAS ticket.
- * @return object SimpleXML response object on success, or empty object on failure.
+ * @param string $ticket The CAS ticket.
+ * @return array
  */
 function mu_auth_validate_cas_ticket( $cas_host, $cas_path, $ticket ) {
 	$validation_url = mu_auth_get_validation_url( $cas_host, $cas_path, $ticket );
-	$response       = wp_remote_get( $validation_url );
+	$data           = wp_remote_get( $validation_url );
 
-	if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
-		return (object) array();
-	}
-
-	$body = wp_remote_retrieve_body( $response );
-	if ( ! $body ) {
-		return (object) array();
-	}
-
-	// phpcs:ignore Generic.PHP.NoSilencedErrors.Discouraged
-	$xml = @simplexml_load_string( $body ); // phpcs:ignore
-	if ( ! $xml ) {
-		return (object) array();
-	}
-
+	$xml = simplexml_load_string( $data['body'] );
 	$xml = $xml->children( 'http://www.yale.edu/tp/cas' );
 
-	return json_decode( wp_json_encode( $xml ), false );
-}
+	$json = wp_json_encode( $xml );
 
+	return json_decode( $json, false );
+}
 
 /**
  * Get the validation URL.
@@ -329,87 +304,24 @@ function mu_auth_get_ticket() {
  */
 function mu_auth_is_ticket_present() {
 	$service_url = mu_auth_get_service_url();
-	return strpos( urldecode( $service_url ), 'ticket=' ) !== false;
+	return strpos( urldecode( $service_url ), 'ticket=' );
 }
 
 /**
- * Determine if the current request is HTTPS, proxy-aware.
- *
- * @return bool
- */
-function mu_auth_is_https_request() {
-	// WordPress helper (respects is_ssl() and site settings).
-	if ( function_exists( 'wp_is_using_https' ) && wp_is_using_https() ) {
-		return true;
-	}
-
-	// Direct PHP signal.
-	if ( is_ssl() || ( ! empty( $_SERVER['HTTPS'] ) && 'off' !== $_SERVER['HTTPS'] ) ) { // phpcs:ignore
-		return true;
-	}
-
-	// Common proxy/CDN headers (Cloudflare, ELB, Nginx proxy, etc).
-	$xfp = isset( $_SERVER['HTTP_X_FORWARDED_PROTO'] ) ? strtolower( $_SERVER['HTTP_X_FORWARDED_PROTO'] ) : ''; // phpcs:ignore
-	if ( 'https' === $xfp ) {
-		return true;
-	}
-
-	if ( ! empty( $_SERVER['HTTP_X_FORWARDED_SSL'] ) && 'on' === strtolower( $_SERVER['HTTP_X_FORWARDED_SSL'] ) ) { // phpcs:ignore
-		return true;
-	}
-
-	// Cloudflare specific JSON header: {"scheme":"https"}.
-	if ( ! empty( $_SERVER['HTTP_CF_VISITOR'] ) ) { // phpcs:ignore
-		$cf = json_decode( (string) $_SERVER['HTTP_CF_VISITOR'], true ); // phpcs:ignore
-		if ( isset( $cf['scheme'] ) && 'https' === strtolower( $cf['scheme'] ) ) {
-			return true;
-		}
-	}
-
-	// Fallback on port check.
-	if ( isset( $_SERVER['SERVER_PORT'] ) && (int) $_SERVER['SERVER_PORT'] === 443 ) { // phpcs:ignore
-		return true;
-	}
-
-	return false;
-}
-
-/**
- * Get the service URL - always force HTTPS for security.
+ * Get the service URL.
  *
  * @return string
  */
 function mu_auth_get_service_url() {
-	// Always use HTTPS for security.
-	$scheme = 'https';
+	$scheme = 'http';
 
-	// Prefer forwarded host if present (behind proxy/load balancer).
-	$host = '';
-	if ( ! empty( $_SERVER['HTTP_X_FORWARDED_HOST'] ) ) {
-		$host = trim( (string) $_SERVER['HTTP_X_FORWARDED_HOST'] ); // phpcs:ignore
-	} elseif ( ! empty( $_SERVER['HTTP_HOST'] ) ) { // phpcs:ignore
-		$host = trim( (string) $_SERVER['HTTP_HOST'] ); // phpcs:ignore
+	if ( isset( $_SERVER['HTTP_USER_AGENT_HTTPS'] ) && 'ON' === $_SERVER['HTTP_USER_AGENT_HTTPS'] ) {
+		$scheme = 'https';
 	}
 
-	$uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '/'; 	// phpcs:ignore
+	$current_url = $scheme . '://' . trim($_SERVER['HTTP_HOST'], '/') . '/' . ltrim($_SERVER['REQUEST_URI'], '/'); // phpcs:ignore
 
-	// Normalize path.
-	$url = $scheme . '://' . rtrim( $host, '/' ) . '/' . ltrim( $uri, '/' );
-
-	// Avoid double-encoding: decode then encode once.
-	return rawurlencode( urldecode( $url ) );
-}
-
-/**
- * True only on the real WP login endpoint (Bedrock-aware).
- *
- * @return bool
- */
-function mu_auth_is_login_screen() {
-	$req_path   = parse_url( $_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH ); // phpcs:ignore
-	$login_path = parse_url( wp_login_url(), PHP_URL_PATH ); // phpcs:ignore
-
-	return ( $login_path && rtrim( $req_path, '/' ) === rtrim( $login_path, '/' ) );
+	return rawurlencode( urldecode( $current_url ) );
 }
 
 /**
@@ -430,21 +342,22 @@ function mu_auth_get_login_url( $cas_host, $cas_path ) {
  * @return string
  */
 function mu_auth_get_service_url_without_ticket() {
-	$service_url = urldecode( mu_auth_get_service_url() );
-	$parts = wp_parse_url( $service_url ); // phpcs:ignore
+	$service_url = mu_auth_get_service_url();
+	$service_url = urldecode( $service_url );
 
-	$scheme = $parts['scheme'] ? $parts['scheme'] : 'https';
-	$host   = $parts['host'] ? $parts['host'] : '';
-	$path   = $parts['path'] ? $parts['path'] : '/';
+	$service_url_parts = wp_parse_url( $service_url );
+	parse_str( $service_url_parts['query'], $query_string_parts );
 
-	$qs = array();
-	if ( ! empty( $parts['query'] ) ) {
-		parse_str( $parts['query'], $qs );
-		unset( $qs['ticket'] );
+	$query_string = '?';
+	foreach ( $query_string_parts as $key => $value ) {
+		if ( 'ticket' !== $key ) {
+			$query_string .= $key . '=' . $value . '&';
+		}
 	}
 
-	$rebuilt = $scheme . '://' . $host . $path . ( $qs ? ( '?' . http_build_query( $qs ) ) : '' );
-	return rawurlencode( $rebuilt );
+	$query_string = rtrim( $query_string, '&' );
+
+	return rawurlencode( $service_url_parts['scheme'] . '://' . $service_url_parts['host'] . $service_url_parts['path'] . $query_string );
 }
 
 /**
@@ -453,47 +366,21 @@ function mu_auth_get_service_url_without_ticket() {
  * @return void
  */
 function mu_auth_check_login() {
-	// Already fine: let logged-in members through.
 	if ( is_admin() && is_user_logged_in() && ( is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) || is_super_admin() ) ) {
 		return;
 	}
 
-	$needs_sso =
-		( mu_auth_is_login_screen() && ! is_user_logged_in() )
-		|| ( is_admin() && ! is_user_logged_in() )
-		|| ( is_admin() && is_user_logged_in() && ! is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) );
+	// Check for WordPress login page or authenticated user without a blog role.
+	if ( mu_auth_is_wordpress_admin_login() || is_admin() && is_user_logged_in() && ! is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) ) { // phpcs:ignore
+		// Remove existing authentication hook.
+		remove_filter( 'authenticate', 'wp_authenticate_username_password', 20, 3 );
 
-	if ( ! $needs_sso ) {
-		return;
+		// Log User In.
+		mu_auth_login_user();
 	}
-
-	// Disable native username/password.
-	remove_filter( 'authenticate', 'wp_authenticate_username_password', 20, 3 );
-
-	// Start CAS.
-	mu_auth_login_user();
 }
 
-/**
- * Should MU Auth run on this request?
- * - Enable if Pantheon, or if MU_AUTH_ENABLE is true, or if WP_ENV is 'production'.
- */
-function mu_auth_is_enabled(): bool {
-	if ( isset( $_ENV['PANTHEON_ENVIRONMENT'] ) ) {
-		return true;
-	}
-
-	// Allow .env/ENV var to force-enable on Forge/Bedrock.
-	$force = getenv( 'MU_AUTH_ENABLE' );
-	if ( is_string( $force ) && in_array( strtolower( $force ), array( '1', 'true', 'yes', 'on' ), true ) ) {
-		return true;
-	}
-
-	// Sensible default for your Bedrock boxes.
-	return ( defined( 'WP_ENV' ) && WP_ENV === 'production' ); // phpcs:ignore
-}
-
-if ( mu_auth_is_enabled() ) {
+if ( isset( $_ENV['PANTHEON_ENVIRONMENT'] ) ) {
 	add_action( 'init', 'mu_auth_check_login' );
 }
 
