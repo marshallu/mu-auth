@@ -367,27 +367,29 @@ function mu_auth_get_service_url_without_ticket() {
  * @return void
  */
 function mu_auth_check_login() {
-	error_log( '=== mu_auth_check_login START ===' ); // phpcs:ignore
-	error_log( 'REQUEST_URI: ' . $_SERVER['REQUEST_URI'] ); // phpcs:ignore
-	error_log( 'is_admin: ' . ( is_admin() ? 'YES' : 'NO' ) ); // phpcs:ignore
-	error_log( 'is_user_logged_in: ' . ( is_user_logged_in() ? 'YES' : 'NO' ) ); // phpcs:ignore
+	$log_file = '/home/forge/test.marshallforall.org/shared/logs/mu-auth-debug.log';
+	$log      = gmdate( 'Y-m-d H:i:s' ) . " === START ===\n";
+	$log     .= 'REQUEST_URI: ' . $_SERVER['REQUEST_URI'] . "\n"; // phpcs:ignore
+	$log     .= 'is_admin: ' . ( is_admin() ? 'YES' : 'NO' ) . "\n";
+	$log     .= 'is_user_logged_in: ' . ( is_user_logged_in() ? 'YES' : 'NO' ) . "\n";
 	if ( is_user_logged_in() ) {
-		error_log( 'current_user_id: ' . get_current_user_id() ); // phpcs:ignore
-		error_log( 'is_user_member_of_blog: ' . ( is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) ? 'YES' : 'NO' ) ); // phpcs:ignore
-		error_log( 'is_super_admin: ' . ( is_super_admin() ? 'YES' : 'NO' ) ); // phpcs:ignore
+		$log .= 'current_user_id: ' . get_current_user_id() . "\n";
+		$log .= 'is_user_member_of_blog: ' . ( is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) ? 'YES' : 'NO' ) . "\n";
+		$log .= 'is_super_admin: ' . ( is_super_admin() ? 'YES' : 'NO' ) . "\n";
 	}
-	error_log( 'has_ticket: ' . ( mu_auth_is_ticket_present() ? 'YES' : 'NO' ) ); // phpcs:ignore
-	error_log( 'mu_auth_is_wordpress_admin_login: ' . ( mu_auth_is_wordpress_admin_login() ? 'YES' : 'NO' ) ); // phpcs:ignore
+	$log .= 'has_ticket: ' . ( mu_auth_is_ticket_present() ? 'YES' : 'NO' ) . "\n";
+	$log .= 'mu_auth_is_wordpress_admin_login: ' . ( mu_auth_is_wordpress_admin_login() ? 'YES' : 'NO' ) . "\n";
+	file_put_contents( $log_file, $log, FILE_APPEND ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 
 	// User is logged in and has proper access - let them through.
 	if ( is_user_logged_in() && ( is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) || is_super_admin() ) ) {
-		error_log( 'EARLY RETURN: User logged in with proper access' ); // phpcs:ignore
+		file_put_contents( $log_file, "EARLY RETURN: User logged in with proper access\n\n", FILE_APPEND ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 		return;
 	}
 
 	// Check for WordPress login page OR trying to access admin without being logged in.
 	if ( mu_auth_is_wordpress_admin_login() || ( is_admin() && ! is_user_logged_in() ) ) {
-		error_log( 'CALLING mu_auth_login_user' ); // phpcs:ignore
+		file_put_contents( $log_file, "CALLING mu_auth_login_user\n\n", FILE_APPEND ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 		// Remove existing authentication hook.
 		remove_filter( 'authenticate', 'wp_authenticate_username_password', 20, 3 );
 
@@ -397,12 +399,12 @@ function mu_auth_check_login() {
 
 	// Handle authenticated user without blog role.
 	if ( is_user_logged_in() && ! is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) && ! is_super_admin() ) {
-		error_log( 'CALLING mu_auth_login_user (no blog role)' ); // phpcs:ignore
+		file_put_contents( $log_file, "CALLING mu_auth_login_user (no blog role)\n\n", FILE_APPEND ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 		remove_filter( 'authenticate', 'wp_authenticate_username_password', 20, 3 );
 		mu_auth_login_user();
 	}
 
-	error_log( '=== mu_auth_check_login END ===' ); // phpcs:ignore
+	file_put_contents( $log_file, "=== END ===\n\n", FILE_APPEND ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents
 }
 
 $is_production = ( isset( $_ENV['PANTHEON_ENVIRONMENT'] ) ) || ( 'development' !== isset( $_ENV['WP_ENV'] ) && $_ENV['WP_ENV'] ); // phpcs:ignore
