@@ -371,11 +371,18 @@ function mu_auth_check_login() {
 	}
 
 	// Check for WordPress login page or authenticated user without a blog role.
-	if ( mu_auth_is_wordpress_admin_login() || is_admin() && is_user_logged_in() && ! is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) ) { // phpcs:ignore
+	// BUT: Don't redirect if we already have a ticket (we're in the callback).
+	if ( ( mu_auth_is_wordpress_admin_login() || is_admin() && is_user_logged_in() && ! is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) ) && ! mu_auth_is_ticket_present() ) { // phpcs:ignore
 		// Remove existing authentication hook.
 		remove_filter( 'authenticate', 'wp_authenticate_username_password', 20, 3 );
 
 		// Log User In.
+		mu_auth_login_user();
+	}
+
+	// If we have a ticket, process it.
+	if ( mu_auth_is_ticket_present() && ! is_user_logged_in() ) {
+		remove_filter( 'authenticate', 'wp_authenticate_username_password', 20, 3 );
 		mu_auth_login_user();
 	}
 }
