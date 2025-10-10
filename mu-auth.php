@@ -221,6 +221,14 @@ function mu_auth_login_user() {
  * @return WP_User|boolean
  */
 function mu_auth_create_user( $username, $first_name, $last_name, $email, $role ) {
+	mu_auth_debug_log( 'create_user: Attempting to create user', array(  // phpcs:ignore
+		'username' => $username,  // phpcs:ignore
+		'first_name' => $first_name,  // phpcs:ignore
+		'last_name' => $last_name,  // phpcs:ignore
+		'email' => $email,  // phpcs:ignore
+		'role' => $role, // phpcs:ignore
+	) );  // phpcs:ignore
+
 	$user_data = array(
 		'user_pass'     => md5( microtime() ),
 		'user_login'    => $username,
@@ -235,8 +243,14 @@ function mu_auth_create_user( $username, $first_name, $last_name, $email, $role 
 	$user = wp_insert_user( $user_data );
 
 	if ( is_wp_error( $user ) ) {
+		mu_auth_debug_log( 'create_user: wp_insert_user failed', array(  // phpcs:ignore
+			'error_code' => $user->get_error_code(), // phpcs:ignore
+			'error_message' => $user->get_error_message(),
+		) );  // phpcs:ignore
 		return false;
 	}
+
+	mu_auth_debug_log( 'create_user: User created successfully', array( 'user_id' => $user ) );
 
 	return new \WP_User( $user );
 }
