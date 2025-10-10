@@ -318,17 +318,12 @@ function mu_auth_is_ticket_present() {
  * @return string
  */
 function mu_auth_get_service_url() {
-	$scheme = 'http';
+	$scheme = is_ssl() ? 'https' : 'http';
 
-	if ( isset( $_SERVER['HTTP_USER_AGENT_HTTPS'] ) && 'ON' === $_SERVER['HTTP_USER_AGENT_HTTPS'] ) {
-		$scheme = 'https';
-	}
-
-	$current_url = $scheme . '://' . trim($_SERVER['HTTP_HOST'], '/') . '/' . ltrim($_SERVER['REQUEST_URI'], '/'); // phpcs:ignore
+	$current_url = $scheme . '://' . trim( $_SERVER['HTTP_HOST'], '/' ) . '/' . ltrim( $_SERVER['REQUEST_URI'], '/' ); // phpcs:ignore
 
 	return rawurlencode( urldecode( $current_url ) );
 }
-
 /**
  * Get the login URL.
  *
