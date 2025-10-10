@@ -590,4 +590,6 @@ function mu_auth_debug_log( $message, $data = null ) {
 	file_put_contents( $log_file, $log_message, FILE_APPEND ); // phpcs:ignore
 }
 
-add_action( 'init', 'mu_auth_check_login' );
+if ( isset( $_ENV['PANTHEON_ENVIRONMENT'] ) || getenv( 'MU_AUTH_ENABLE' ) ) {
+	add_action( 'init', 'mu_auth_check_login' );
+}
