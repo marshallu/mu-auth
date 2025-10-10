@@ -60,13 +60,14 @@ add_action( 'wp_logout', 'mu_auth_logout_redirect' );
  */
 function mu_auth_is_wordpress_admin_login() {
 	$current_url = trim( $_SERVER['REQUEST_URI'], '/' ); // phpcs:ignore
+
+	// If user is already logged in and has blog access, this isn't a login attempt.
+	if ( is_user_logged_in() && ( is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) || is_super_admin() ) ) {
+		return false;
+	}
+
 	return (
-		(
-			strpos( $current_url, 'wp-login.php' ) !== false ||
-			strpos( $current_url, 'wp-admin' ) !== false ||
-			strpos( $current_url, 'wp/wp-admin' ) !== false ||
-			strpos( $current_url, 'evergreen' ) !== false
-		)
+		( strpos( $current_url, 'wp-login.php' ) !== false || strpos( $current_url, 'evergreen' ) !== false )
 		&& strpos( $current_url, 'action=logout' ) === false
 		&& strpos( $current_url, 'action=postpass' ) === false
 	);
@@ -366,13 +367,13 @@ function mu_auth_get_service_url_without_ticket() {
  * @return void
  */
 function mu_auth_check_login() {
+	// User is logged in and has proper access - let them through.
 	if ( is_admin() && is_user_logged_in() && ( is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) || is_super_admin() ) ) {
 		return;
 	}
 
-	// Check for WordPress login page or authenticated user without a blog role.
-	// BUT: Don't redirect if we already have a ticket (we're in the callback).
-	if ( ( mu_auth_is_wordpress_admin_login() || is_admin() && is_user_logged_in() && ! is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) ) && ! mu_auth_is_ticket_present() ) { // phpcs:ignore
+	// Check for WordPress login page OR trying to access admin without being logged in.
+	if ( mu_auth_is_wordpress_admin_login() || ( is_admin() && ! is_user_logged_in() ) ) {
 		// Remove existing authentication hook.
 		remove_filter( 'authenticate', 'wp_authenticate_username_password', 20, 3 );
 
@@ -380,8 +381,8 @@ function mu_auth_check_login() {
 		mu_auth_login_user();
 	}
 
-	// If we have a ticket, process it.
-	if ( mu_auth_is_ticket_present() && ! is_user_logged_in() ) {
+	// Handle authenticated user without blog role.
+	if ( is_admin() && is_user_logged_in() && ! is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) && ! is_super_admin() ) {
 		remove_filter( 'authenticate', 'wp_authenticate_username_password', 20, 3 );
 		mu_auth_login_user();
 	}
