@@ -385,7 +385,9 @@ function mu_auth_check_login() {
 	}
 }
 
-if ( isset( $_ENV['PANTHEON_ENVIRONMENT'] ) || isset( $_ENV['FORGE_SITE_PATH'] ) ) {
+$is_production = ( isset( $_ENV['PANTHEON_ENVIRONMENT'] ) ) || 'development' !== ( isset( $_ENV['WP_ENV'] ) && $_ENV['WP_ENV'] ); // phpcs:ignore
+
+if ( $is_production ) {
 	add_action( 'init', 'mu_auth_check_login' );
 }
 
