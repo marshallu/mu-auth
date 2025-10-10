@@ -222,34 +222,42 @@ function mu_auth_get_user_by_username( $username ) {
  * @return array
  */
 function mu_auth_authenticate() {
+	mu_auth_debug_log( 'authenticate called' );
+
 	if ( ! mu_auth_is_ticket_present() ) {
 		$login_url = mu_auth_get_login_url( MUCASAUTH_CAS_HOST, MUCASAUTH_CAS_PATH );
+		mu_auth_debug_log( 'authenticate: No ticket, redirecting to CAS', array( 'login_url' => $login_url ) );
 		wp_redirect( $login_url ); // phpcs:ignore
 		exit;
 	}
 
 	$ticket = mu_auth_get_ticket();
+	mu_auth_debug_log( 'authenticate: Got ticket', array( 'ticket' => $ticket ) );
 
 	if ( ! $ticket ) {
 		$login_url = mu_auth_get_login_url( MUCASAUTH_CAS_HOST, MUCASAUTH_CAS_PATH );
+		mu_auth_debug_log( 'authenticate: Invalid ticket, redirecting to CAS' );
 		wp_redirect( $login_url ); // phpcs:ignore
 		exit;
 	}
 
 	$cas_response = (object) mu_auth_validate_cas_ticket( MUCASAUTH_CAS_HOST, MUCASAUTH_CAS_PATH, $ticket );
+	mu_auth_debug_log( 'authenticate: CAS response', array( 'has_success' => isset( $cas_response->authenticationSuccess ) ) ); // phpcs:ignore
 
 	if ( ! isset( $cas_response->authenticationSuccess ) ) { // phpcs:ignore
 		$login_url = mu_auth_get_login_url( MUCASAUTH_CAS_HOST, MUCASAUTH_CAS_PATH );
+		mu_auth_debug_log( 'authenticate: CAS validation failed, redirecting to CAS' );
 		wp_redirect( $login_url ); // phpcs:ignore
 		exit;
 	}
+
+	mu_auth_debug_log( 'authenticate: Success', array( 'user' => $cas_response->authenticationSuccess->user ?? 'unknown' ) ); // phpcs:ignore
 
 	return array(
 		'user'       => $cas_response->authenticationSuccess->user, // phpcs:ignore
 		'attributes' => json_decode( json_encode( $cas_response->authenticationSuccess->attributes ), true ), // phpcs:ignore
 	);
 }
-
 /**
  * Validate the CAS ticket.
  *
@@ -368,15 +376,25 @@ function mu_auth_get_service_url() {
 	// Prefer forwarded host if present (behind proxy/load balancer).
 	$host = '';
 	if ( ! empty( $_SERVER['HTTP_X_FORWARDED_HOST'] ) ) {
-		$host = trim( (string) $_SERVER['HTTP_X_FORWARDED_HOST'] );  // phpcs:ignore
+		$host = trim( (string) $_SERVER['HTTP_X_FORWARDED_HOST'] ); // phpcs:ignore
 	} elseif ( ! empty( $_SERVER['HTTP_HOST'] ) ) {
-		$host = trim( (string) $_SERVER['HTTP_HOST'] );  // phpcs:ignore
+		$host = trim( (string) $_SERVER['HTTP_HOST'] ); // phpcs:ignore
 	}
 
-	$uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '/';  // phpcs:ignore
+	$uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '/'; // phpcs:ignore
 
 	// Build the URL.
 	$current_url = $scheme . '://' . rtrim( $host, '/' ) . '/' . ltrim( $uri, '/' );
+
+	mu_auth_debug_log(
+		'get_service_url',
+		array(
+			'scheme'   => $scheme,
+			'host'     => $host,
+			'uri'      => $uri,
+			'full_url' => $current_url,
+		)
+	);
 
 	return rawurlencode( urldecode( $current_url ) );
 }
@@ -426,18 +444,52 @@ function mu_auth_get_service_url_without_ticket() {
  * @return void
  */
 function mu_auth_check_login() {
+	mu_auth_debug_log(
+		'check_login called',
+		array(
+			'is_admin'     => is_admin(),
+			'is_logged_in' => is_user_logged_in(),
+			'request_uri'  => $_SERVER['REQUEST_URI'] ?? '', // phpcs:ignore
+			'has_ticket'   => isset( $_GET['ticket'] ) ? 'yes' : 'no', // phpcs:ignore
+		)
+	);
+
 	if ( is_admin() && is_user_logged_in() && ( is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) || is_super_admin() ) ) {
+		mu_auth_debug_log( 'check_login: User already authenticated and has access - returning' );
 		return;
 	}
 
 	// Check for WordPress login page or authenticated user without a blog role.
-	if ( mu_auth_is_wordpress_admin_login() || ( is_admin() && is_user_logged_in() && ! is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) ) ) { // phpcs:ignore
+	if ( mu_auth_is_wordpress_admin_login() || ( is_admin() && is_user_logged_in() && ! is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) ) ) {
+		mu_auth_debug_log( 'check_login: Triggering login process' );
+
 		// Remove existing authentication hook.
 		remove_filter( 'authenticate', 'wp_authenticate_username_password', 20, 3 );
 
 		// Log User In.
 		mu_auth_login_user();
 	}
+}
+
+/**
+ * Debug logging function - REMOVE AFTER DEBUGGING
+ *
+ * @param string $message The message to log.
+ * @param mixed  $data    Optional. Additional data to log.
+ * @return void
+ */
+function mu_auth_debug_log( $message, $data = null ) {
+	$log_file = WP_CONTENT_DIR . '/mu-auth-debug.log'; // phpcs:ignore
+	$timestamp = date( 'Y-m-d H:i:s' );// phpcs:ignore
+	$log_message = "[{$timestamp}] {$message}";
+
+	if ( $data !== null ) { // phpcs:ignore
+		$log_message .= ' | Data: ' . print_r( $data, true ); // phpcs:ignore
+	}
+
+	$log_message .= "\n";
+
+	file_put_contents( $log_file, $log_message, FILE_APPEND ); // phpcs:ignore
 }
 
 if ( isset( $_ENV['PANTHEON_ENVIRONMENT'] ) || getenv( 'MU_AUTH_ENABLE' ) ) {
