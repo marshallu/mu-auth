@@ -479,7 +479,13 @@ function mu_auth_check_login() {
  * @return void
  */
 function mu_auth_debug_log( $message, $data = null ) {
-	$log_file = WP_CONTENT_DIR . '/mu-auth-debug.log'; // phpcs:ignore
+	if ( defined( 'WP_CONTENT_DIR' ) ) {
+		$log_file = WP_CONTENT_DIR . '/mu-auth-debug.log';
+	} else {
+		// Fallback for standard WordPress.
+		$log_file = dirname( __FILE__ ) . '/mu-auth-debug.log'; // phpcs:ignore
+	}
+
 	$timestamp = date( 'Y-m-d H:i:s' );// phpcs:ignore
 	$log_message = "[{$timestamp}] {$message}";
 
