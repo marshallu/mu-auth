@@ -401,6 +401,18 @@ function mu_auth_get_service_url() {
 }
 
 /**
+ * True only on the real WP login endpoint (Bedrock-aware).
+ *
+ * @return bool
+ */
+function mu_auth_is_login_screen() {
+	$req_path   = parse_url( $_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH ); // phpcs:ignore
+	$login_path = parse_url( wp_login_url(), PHP_URL_PATH ); // phpcs:ignore
+
+	return ( $login_path && rtrim( $req_path, '/' ) === rtrim( $login_path, '/' ) );
+}
+
+/**
  * Get the login URL.
  *
  * @param string $cas_host The CAS host.
@@ -441,18 +453,25 @@ function mu_auth_get_service_url_without_ticket() {
  * @return void
  */
 function mu_auth_check_login() {
+	// Already fine: let logged-in members through.
 	if ( is_admin() && is_user_logged_in() && ( is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) || is_super_admin() ) ) {
 		return;
 	}
 
-	// Check for WordPress login page or authenticated user without a blog role.
-	if ( mu_auth_is_wordpress_admin_login() || is_admin() && is_user_logged_in() && ! is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) ) { // phpcs:ignore
-		// Remove existing authentication hook.
-		remove_filter( 'authenticate', 'wp_authenticate_username_password', 20, 3 );
+	$needs_sso =
+		( mu_auth_is_login_screen() && ! is_user_logged_in() )
+		|| ( is_admin() && ! is_user_logged_in() )
+		|| ( is_admin() && is_user_logged_in() && ! is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) );
 
-		// Log User In.
-		mu_auth_login_user();
+	if ( ! $needs_sso ) {
+		return;
 	}
+
+	// Disable native username/password.
+	remove_filter( 'authenticate', 'wp_authenticate_username_password', 20, 3 );
+
+	// Start CAS.
+	mu_auth_login_user();
 }
 
 /**
