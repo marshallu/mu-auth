@@ -333,25 +333,70 @@ function mu_auth_is_ticket_present() {
 }
 
 /**
+ * Determine if the current request is HTTPS, proxy-aware.
+ *
+ * @return bool
+ */
+function mu_auth_is_https_request() {
+	// WordPress helper (respects is_ssl() and site settings).
+	if ( function_exists( 'wp_is_using_https' ) && wp_is_using_https() ) {
+		return true;
+	}
+
+	// Direct PHP signal.
+	if ( is_ssl() || ( ! empty( $_SERVER['HTTPS'] ) && 'off' !== $_SERVER['HTTPS'] ) ) { // phpcs:ignore
+		return true;
+	}
+
+	// Common proxy/CDN headers (Cloudflare, ELB, Nginx proxy, etc).
+	$xfp = isset( $_SERVER['HTTP_X_FORWARDED_PROTO'] ) ? strtolower( $_SERVER['HTTP_X_FORWARDED_PROTO'] ) : ''; // phpcs:ignore
+	if ( 'https' === $xfp ) {
+		return true;
+	}
+
+	if ( ! empty( $_SERVER['HTTP_X_FORWARDED_SSL'] ) && 'on' === strtolower( $_SERVER['HTTP_X_FORWARDED_SSL'] ) ) { // phpcs:ignore
+		return true;
+	}
+
+	// Cloudflare specific JSON header: {"scheme":"https"}.
+	if ( ! empty( $_SERVER['HTTP_CF_VISITOR'] ) ) { // phpcs:ignore
+		$cf = json_decode( (string) $_SERVER['HTTP_CF_VISITOR'], true ); // phpcs:ignore
+		if ( isset( $cf['scheme'] ) && 'https' === strtolower( $cf['scheme'] ) ) {
+			return true;
+		}
+	}
+
+	// Fallback on port check.
+	if ( isset( $_SERVER['SERVER_PORT'] ) && (int) $_SERVER['SERVER_PORT'] === 443 ) { // phpcs:ignore
+		return true;
+	}
+
+	return false;
+}
+
+/**
  * Get the service URL.
  *
  * @return string
  */
 function mu_auth_get_service_url() {
-	$host  = $_SERVER['HTTP_HOST']  ? $_SERVER['HTTP_HOST'] : ''; // phpcs:ignore
-	$uri   = $_SERVER['REQUEST_URI'] ? $_SERVER['REQUEST_URI'] : '/'; // phpcs:ignore
+	$scheme = mu_auth_is_https_request() ? 'https' : 'http';
 
-	// Detect scheme reliably.
-	$https = is_ssl()
-		|| (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') // phpcs:ignore
-		|| (isset($_SERVER['SERVER_PORT']) && (int) $_SERVER['SERVER_PORT'] === 443) // phpcs:ignore
-		|| (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https'); // phpcs:ignore
+	// Prefer forwarded host if present (behind proxy/load balancer).
+	$host = '';
+	if ( ! empty( $_SERVER['HTTP_X_FORWARDED_HOST'] ) ) { // phpcs:ignore
+		$host = trim( (string) $_SERVER['HTTP_X_FORWARDED_HOST'] ); // phpcs:ignore
+	} elseif ( ! empty( $_SERVER['HTTP_HOST'] ) ) { // phpcs:ignore
+		$host = trim( (string) $_SERVER['HTTP_HOST'] ); // phpcs:ignore
+	}
 
-	$scheme = $https ? 'https' : 'http';
+	$uri = isset( $_SERVER['REQUEST_URI'] ) ? (string) $_SERVER['REQUEST_URI'] : '/'; // phpcs:ignore
 
-	$current_url = $scheme . '://' . trim( $host, '/' ) . '/' . ltrim( $uri, '/' );
+	// Normalize path.
+	$url = $scheme . '://' . rtrim( $host, '/' ) . '/' . ltrim( $uri, '/' );
 
-	return rawurlencode( urldecode( $current_url ) );
+	// Avoid double-encoding: decode then encode once.
+	return rawurlencode( urldecode( $url ) );
 }
 
 /**
