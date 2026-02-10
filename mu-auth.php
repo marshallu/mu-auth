@@ -346,7 +346,7 @@ function mu_auth_get_service_url_without_ticket() {
 	$service_url = urldecode( $service_url );
 
 	$service_url_parts = wp_parse_url( $service_url );
-	parse_str( $service_url_parts['query'], $query_string_parts );
+	parse_str( $service_url_parts['query'] ?? '', $query_string_parts );
 
 	$query_string = '?';
 	foreach ( $query_string_parts as $key => $value ) {
