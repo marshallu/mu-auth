@@ -19,6 +19,18 @@ const MUCASAUTH_CAS_ATTRIBUTE_FIRSTNAME = 'firstname';
 const MUCASAUTH_CAS_ATTRIBUTE_LASTNAME  = 'lastname';
 const MUCASAUTH_CAS_ATTRIBUTE_EMAIL     = 'email';
 
+/**
+ * Allow redirects to the CAS host.
+ *
+ * @param string[] $hosts Allowed redirect hosts.
+ * @return string[]
+ */
+function mu_auth_allowed_redirect_hosts( $hosts ) {
+	$hosts[] = wp_parse_url( MUCASAUTH_CAS_HOST, PHP_URL_HOST );
+	return $hosts;
+}
+add_filter( 'allowed_redirect_hosts', 'mu_auth_allowed_redirect_hosts' );
+
 if ( ! class_exists( 'ACF' ) ) {
 	return new WP_Error( 'broke', __( 'Advanced Custom Fields is required for this plugin.', 'mu-moments' ) );
 }
@@ -99,9 +111,14 @@ function mu_auth_login_user() {
 	// By default site access is not allowed.
 	$site_access_allowed = false;
 
-	$supers = array(
-		'username',
-	);
+	/**
+	 * Filters the list of MU Net IDs that bypass per-site access control checks.
+	 * Define this in a private config (e.g. wp-config.php via add_filter) rather
+	 * than in this file so NetIDs are not stored in version control.
+	 *
+	 * @param string[] $supers Array of MU Net IDs.
+	 */
+	$supers = apply_filters( 'mu_auth_super_users', array() );
 
 	// Allow users in $supers array to access site.
 	if ( in_array( $auth_data['user'], $supers, true ) ) {
@@ -184,7 +201,7 @@ function mu_auth_login_user() {
  */
 function mu_auth_create_user( $username, $first_name, $last_name, $email, $role ) {
 	$user_data = array(
-		'user_pass'     => md5( microtime() ),
+		'user_pass'     => wp_generate_password( 32 ),
 		'user_login'    => $username,
 		'user_nicename' => $username,
 		'user_email'    => $email,
@@ -222,7 +239,7 @@ function mu_auth_get_user_by_username( $username ) {
 function mu_auth_authenticate() {
 	if ( ! mu_auth_is_ticket_present() ) {
 		$login_url = mu_auth_get_login_url( MUCASAUTH_CAS_HOST, MUCASAUTH_CAS_PATH );
-		wp_redirect( $login_url ); // phpcs:ignore
+		wp_safe_redirect( $login_url );
 		exit;
 	}
 
@@ -230,7 +247,7 @@ function mu_auth_authenticate() {
 
 	if ( ! $ticket ) {
 		$login_url = mu_auth_get_login_url( MUCASAUTH_CAS_HOST, MUCASAUTH_CAS_PATH );
-		wp_redirect( $login_url ); // phpcs:ignore
+		wp_safe_redirect( $login_url );
 		exit;
 	}
 
@@ -238,7 +255,7 @@ function mu_auth_authenticate() {
 
 	if ( ! isset( $cas_response->authenticationSuccess ) ) { // phpcs:ignore
 		$login_url = mu_auth_get_login_url( MUCASAUTH_CAS_HOST, MUCASAUTH_CAS_PATH );
-		wp_redirect( $login_url ); // phpcs:ignore
+		wp_safe_redirect( $login_url );
 		exit;
 	}
 
@@ -260,7 +277,16 @@ function mu_auth_validate_cas_ticket( $cas_host, $cas_path, $ticket ) {
 	$validation_url = mu_auth_get_validation_url( $cas_host, $cas_path, $ticket );
 	$data           = wp_remote_get( $validation_url );
 
-	$xml = simplexml_load_string( $data['body'] );
+	if ( is_wp_error( $data ) ) {
+		return array();
+	}
+
+	$xml = simplexml_load_string( wp_remote_retrieve_body( $data ) );
+
+	if ( false === $xml ) {
+		return array();
+	}
+
 	$xml = $xml->children( 'http://www.yale.edu/tp/cas' );
 
 	$json = wp_json_encode( $xml );
