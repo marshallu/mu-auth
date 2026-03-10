@@ -142,7 +142,6 @@ function mu_auth_login_user() {
 			$auth_data['attributes'][ MUCASAUTH_CAS_ATTRIBUTE_LASTNAME ],
 			$auth_data['attributes'][ MUCASAUTH_CAS_ATTRIBUTE_EMAIL ],
 			$role,
-			$selected_user,
 		);
 
 		// Check for valid created WordPress user.
@@ -153,7 +152,7 @@ function mu_auth_login_user() {
 	}
 
 	// Add WordPress user to blog/site if needed.
-	if ( $user && ! is_user_member_of_blog( $user->ID, get_current_blog_id() ) && ! is_super_admin( $user->ID ) ) {
+	if ( ! is_user_member_of_blog( $user->ID, get_current_blog_id() ) && ! is_super_admin( $user->ID ) ) {
 		$role = $selected_user['permissions_level'] ? mu_auth_get_role_from_permissions_level( $selected_user['permissions_level'] ) : 'administrator';
 		add_user_to_blog( get_current_blog_id(), $user->ID, $role );
 	}
@@ -209,7 +208,7 @@ function mu_auth_create_user( $username, $first_name, $last_name, $email, $role 
  *
  * @param string $username The username of the user.
  *
- * @return WP_User
+ * @return WP_User|false
  */
 function mu_auth_get_user_by_username( $username ) {
 	return get_user_by( 'login', $username );
@@ -373,7 +372,7 @@ function mu_auth_check_login() {
 	// Check for WordPress login page or authenticated user without a blog role.
 	if ( mu_auth_is_wordpress_admin_login() || is_admin() && is_user_logged_in() && ! is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) ) { // phpcs:ignore
 		// Remove existing authentication hook.
-		remove_filter( 'authenticate', 'wp_authenticate_username_password', 20, 3 );
+		remove_filter( 'authenticate', 'wp_authenticate_username_password', 20 );
 
 		// Log User In.
 		mu_auth_login_user();
