@@ -49,7 +49,7 @@ Add MU Net IDs and assign each a permissions level:
 
 ### Super Users
 
-To grant certain MU Net IDs unconditional access across all sites without storing them in version control, add a filter in `wp-config.php` or a private plugin:
+To grant certain MU Net IDs unconditional access across all sites without storing them in version control, add a filter in a mu-plugin (e.g. `wp-content/mu-plugins/super-users.php`):
 
 ```php
 add_filter( 'mu_auth_super_users', function( $users ) {
