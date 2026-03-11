@@ -5,7 +5,7 @@
  * Description:     Marshall University SSO authentication for WordPress
  * Author:          Christopher McComas
  * Author URI:      https://www.marshall.edu
- * Version:         1.1.1
+ * Version:         1.1.2
  *
  * @package         MU_Auth
  */
@@ -340,7 +340,11 @@ function mu_auth_is_ticket_present() {
 function mu_auth_get_service_url() {
 	$scheme = 'http';
 
-	if ( isset( $_SERVER['HTTP_USER_AGENT_HTTPS'] ) && 'ON' === $_SERVER['HTTP_USER_AGENT_HTTPS'] ) {
+	if (
+		( isset( $_SERVER['HTTPS'] ) && 'off' !== strtolower( wp_unslash( $_SERVER['HTTPS'] ) ) ) || // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		( isset( $_SERVER['HTTP_X_FORWARDED_PROTO'] ) && 'https' === strtolower( wp_unslash( $_SERVER['HTTP_X_FORWARDED_PROTO'] ) ) ) || // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		( isset( $_SERVER['HTTP_USER_AGENT_HTTPS'] ) && 'ON' === $_SERVER['HTTP_USER_AGENT_HTTPS'] ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+	) {
 		$scheme = 'https';
 	}
 
