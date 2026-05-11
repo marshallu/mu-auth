@@ -5,7 +5,7 @@
  * Description:     Marshall University SSO authentication for WordPress
  * Author:          Christopher McComas
  * Author URI:      https://www.marshall.edu
- * Version:         1.1.3
+ * Version:         1.1.4
  *
  * @package         MU_Auth
  */
@@ -87,10 +87,11 @@ function mu_auth_is_wordpress_admin_login() {
  */
 function mu_auth_get_role_from_permissions_level( $permissions_level ) {
 	$role_mapping = array(
-		'Administrator' => 'administrator',
-		'Editor'        => 'editor',
-		'Forms'         => 'gravity_forms_viewer',
-		'Profiles'      => 'profiles_manager',
+		'Administrator'    => 'administrator',
+		'Editor'           => 'editor',
+		'Forms'            => 'gravity_forms_viewer',
+		'Profiles'         => 'profiles_manager',
+		'Forms & Profiles' => 'forms_profiles_manager',
 	);
 
 	return isset( $role_mapping[ $permissions_level ] ) ? $role_mapping[ $permissions_level ] : 'administrator';
@@ -972,3 +973,298 @@ function mu_auth_init_profiles_manager() {
 
 // Initialize the Profiles Manager functionality.
 add_action( 'init', 'mu_auth_init_profiles_manager' );
+
+/**
+ * Forms & Profiles Manager Role functionality for MU Auth plugin.
+ *
+ * Combined role for users who need access to both Gravity Forms entries
+ * and Employee profile management.
+ *
+ * @package MU_Auth
+ * @since 1.1.4
+ */
+
+/**
+ * Create the Forms & Profiles Manager role.
+ *
+ * @return void
+ */
+function mu_auth_create_forms_profiles_manager_role() {
+	if ( get_role( 'forms_profiles_manager' ) ) {
+		return;
+	}
+
+	add_role(
+		'forms_profiles_manager',
+		'Forms & Profiles Manager',
+		array(
+			'read'                          => true,
+
+			// Gravity Forms capabilities.
+			'gravityforms_view_entries'     => true,
+			'gravityforms_export_entries'   => true,
+			'gravityforms_view_entry_notes' => true,
+			'gravityforms_edit_entry_notes' => true,
+
+			// Employee post type capabilities.
+			'edit_employee'                 => true,
+			'edit_employees'                => true,
+			'edit_others_employees'         => true,
+			'publish_employees'             => true,
+			'read_employee'                 => true,
+			'read_private_employees'        => true,
+			'delete_employee'               => true,
+			'delete_employees'              => true,
+			'delete_others_employees'       => true,
+			'delete_private_employees'      => true,
+			'delete_published_employees'    => true,
+			'edit_published_employees'      => true,
+
+			// Department taxonomy capabilities.
+			'manage_department'             => true,
+			'edit_department'               => true,
+			'delete_department'             => true,
+			'assign_department'             => true,
+
+			// Media library access for profile images.
+			'upload_files'                  => true,
+		)
+	);
+}
+
+/**
+ * Check if current user has Forms & Profiles Manager role.
+ *
+ * @return bool True if user has the role, false otherwise.
+ */
+function mu_auth_is_forms_profiles_manager() {
+	$user = wp_get_current_user();
+
+	if ( ! $user->exists() ) {
+		return false;
+	}
+
+	return in_array( 'forms_profiles_manager', $user->roles, true );
+}
+
+/**
+ * Remove admin menu items for the Forms & Profiles Manager role,
+ * keeping Gravity Forms and Employee post type menus.
+ *
+ * @return void
+ */
+function mu_auth_restrict_admin_menu_for_forms_profiles_manager() {
+	if ( ! mu_auth_is_forms_profiles_manager() ) {
+		return;
+	}
+
+	$menu_items_to_remove = array(
+		'index.php',               // Dashboard.
+		'edit.php',                // Posts.
+		'edit.php?post_type=page', // Pages.
+		'edit-comments.php',       // Comments.
+		'themes.php',              // Appearance.
+		'plugins.php',             // Plugins.
+		'users.php',               // Users.
+		'tools.php',               // Tools.
+		'options-general.php',     // Settings.
+	);
+
+	foreach ( $menu_items_to_remove as $menu_item ) {
+		remove_menu_page( $menu_item );
+	}
+
+	// Remove custom post type menus except 'employee'.
+	$custom_post_types = get_post_types(
+		array(
+			'public'   => true,
+			'_builtin' => false,
+		)
+	);
+	foreach ( $custom_post_types as $post_type ) {
+		if ( 'employee' !== $post_type ) {
+			remove_menu_page( 'edit.php?post_type=' . $post_type );
+		}
+	}
+}
+
+/**
+ * Hide admin bar items for the Forms & Profiles Manager role.
+ *
+ * @return void
+ */
+function mu_auth_hide_admin_bar_items_for_forms_profiles_manager() {
+	if ( ! mu_auth_is_forms_profiles_manager() ) {
+		return;
+	}
+
+	global $wp_admin_bar;
+
+	$wp_admin_bar->remove_menu( 'wp-logo' );
+	$wp_admin_bar->remove_menu( 'site-name' );
+	$wp_admin_bar->remove_menu( 'updates' );
+	$wp_admin_bar->remove_menu( 'comments' );
+	$wp_admin_bar->remove_menu( 'new-content' );
+}
+
+/**
+ * Add custom "New Employee" button to admin bar for Forms & Profiles Manager.
+ *
+ * @return void
+ */
+function mu_auth_add_new_employee_admin_bar_for_forms_profiles_manager() {
+	if ( ! mu_auth_is_forms_profiles_manager() ) {
+		return;
+	}
+
+	global $wp_admin_bar;
+
+	$wp_admin_bar->add_menu(
+		array(
+			'id'     => 'new-employee',
+			'title'  => '+ New Employee',
+			'href'   => admin_url( 'post-new.php?post_type=employee' ),
+			'parent' => 'top-secondary',
+		)
+	);
+}
+
+/**
+ * Redirect Forms & Profiles Manager to employee list after login.
+ *
+ * @param string           $redirect_to The redirect destination URL.
+ * @param string           $request     The requested redirect destination URL passed as a parameter.
+ * @param WP_User|WP_Error $user        WP_User object on success, WP_Error object on failure.
+ *
+ * @return string The redirect URL.
+ */
+function mu_auth_redirect_forms_profiles_manager_after_login( $redirect_to, $request, $user ) {
+	if ( ! is_a( $user, 'WP_User' ) ) {
+		return $redirect_to;
+	}
+
+	if ( in_array( 'forms_profiles_manager', $user->roles, true ) ) {
+		return admin_url( 'edit.php?post_type=employee' );
+	}
+
+	return $redirect_to;
+}
+
+/**
+ * Prevent access to other admin pages for the Forms & Profiles Manager role.
+ *
+ * @return void
+ */
+function mu_auth_restrict_admin_access_for_forms_profiles_manager() {
+	if ( ! mu_auth_is_forms_profiles_manager() ) {
+		return;
+	}
+
+	global $pagenow, $typenow;
+
+	if ( 'admin-ajax.php' === $pagenow ) {
+		return;
+	}
+
+	$allowed_pages = array(
+		'admin.php',       // Gravity Forms.
+		'admin-post.php',  // GF exports.
+		'post.php',
+		'post-new.php',
+		'edit.php',
+		'edit-tags.php',
+		'term.php',
+		'upload.php',
+		'media-upload.php',
+		'async-upload.php',
+	);
+
+	if ( ! in_array( $pagenow, $allowed_pages, true ) ) {
+		wp_safe_redirect( admin_url( 'edit.php?post_type=employee' ) );
+		exit;
+	}
+
+	// Restrict admin.php to Gravity Forms pages.
+	if ( 'admin.php' === $pagenow ) {
+		$page = isset( $_GET['page'] ) ? sanitize_text_field( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		$allowed_gf_pages = array(
+			'gf_entries',
+			'gf_entry_detail',
+			'gf_export',
+		);
+
+		if ( ! empty( $page ) && ! in_array( $page, $allowed_gf_pages, true ) ) {
+			wp_safe_redirect( admin_url( 'edit.php?post_type=employee' ) );
+			exit;
+		}
+	}
+
+	// Restrict post editing to employee post type.
+	if ( in_array( $pagenow, array( 'post.php', 'post-new.php', 'edit.php' ), true ) ) {
+		$post_type = '';
+
+		if ( 'post-new.php' === $pagenow || 'edit.php' === $pagenow ) {
+			$post_type = isset( $_GET['post_type'] ) ? sanitize_text_field( wp_unslash( $_GET['post_type'] ) ) : 'post'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		} elseif ( 'post.php' === $pagenow ) {
+			if ( isset( $_GET['post'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				$post_id   = intval( $_GET['post'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				$post_type = get_post_type( $post_id );
+			} elseif ( isset( $_POST['post_ID'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				$post_id   = intval( $_POST['post_ID'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				$post_type = get_post_type( $post_id );
+			} elseif ( ! empty( $typenow ) ) {
+				$post_type = $typenow;
+			}
+		}
+
+		if ( 'employee' !== $post_type ) {
+			wp_safe_redirect( admin_url( 'edit.php?post_type=employee' ) );
+			exit;
+		}
+	}
+
+	// Restrict taxonomy editing to department taxonomy.
+	if ( in_array( $pagenow, array( 'edit-tags.php', 'term.php' ), true ) ) {
+		$taxonomy = isset( $_GET['taxonomy'] ) ? sanitize_text_field( wp_unslash( $_GET['taxonomy'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		if ( 'department' !== $taxonomy ) {
+			wp_safe_redirect( admin_url( 'edit.php?post_type=employee' ) );
+			exit;
+		}
+	}
+}
+
+/**
+ * Customize the admin footer for Forms & Profiles Manager role.
+ *
+ * @param string $text The current admin footer text.
+ *
+ * @return string The modified admin footer text.
+ */
+function mu_auth_custom_admin_footer_for_forms_profiles_manager( $text ) {
+	if ( mu_auth_is_forms_profiles_manager() ) {
+		return '<p style="text-align: center; color: #666;">Forms & Profiles Dashboard</p>';
+	}
+
+	return $text;
+}
+
+/**
+ * Initialize Forms & Profiles Manager role functionality.
+ *
+ * @return void
+ */
+function mu_auth_init_forms_profiles_manager() {
+	mu_auth_create_forms_profiles_manager_role();
+
+	add_action( 'admin_menu', 'mu_auth_restrict_admin_menu_for_forms_profiles_manager', 999 );
+	add_action( 'wp_before_admin_bar_render', 'mu_auth_hide_admin_bar_items_for_forms_profiles_manager' );
+	add_action( 'admin_bar_menu', 'mu_auth_add_new_employee_admin_bar_for_forms_profiles_manager', 999 );
+	add_filter( 'login_redirect', 'mu_auth_redirect_forms_profiles_manager_after_login', 10, 3 );
+	add_action( 'admin_init', 'mu_auth_restrict_admin_access_for_forms_profiles_manager' );
+	add_filter( 'admin_footer_text', 'mu_auth_custom_admin_footer_for_forms_profiles_manager' );
+}
+
+// Initialize the Forms & Profiles Manager functionality.
+add_action( 'init', 'mu_auth_init_forms_profiles_manager' );
