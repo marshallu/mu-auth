@@ -42,6 +42,8 @@ require plugin_dir_path( __FILE__ ) . '/mu-auth-admin.php';
  * Flush rewrites whenever the plugin is activated.
  */
 function mu_auth_activate() {
+	// Required to register plugin rewrite rules after activation.
+	// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.flush_rewrite_rules_flush_rewrite_rules
 	flush_rewrite_rules();
 }
 register_activation_hook( __FILE__, 'mu_auth_activate' );
@@ -50,6 +52,8 @@ register_activation_hook( __FILE__, 'mu_auth_activate' );
  * Flush rewrites whenever the plugin is deactivated.
  */
 function mu_auth_deactivate() {
+	// Required to unregister plugin rewrite rules after deactivation.
+	// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.flush_rewrite_rules_flush_rewrite_rules
 	flush_rewrite_rules();
 }
 register_deactivation_hook( __FILE__, 'mu_auth_deactivate' );
@@ -276,7 +280,12 @@ function mu_auth_authenticate() {
  */
 function mu_auth_validate_cas_ticket( $cas_host, $cas_path, $ticket ) {
 	$validation_url = mu_auth_get_validation_url( $cas_host, $cas_path, $ticket );
-	$data           = wp_remote_get( $validation_url );
+	if ( function_exists( 'vip_safe_wp_remote_get' ) ) {
+		$data = vip_safe_wp_remote_get( $validation_url );
+	} else {
+		// Keep the plugin functional outside WordPress VIP environments.
+		$data = wp_remote_get( $validation_url ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_remote_get_wp_remote_get
+	}
 
 	if ( is_wp_error( $data ) ) {
 		return array();
@@ -415,6 +424,27 @@ if ( isset( $_ENV['PANTHEON_ENVIRONMENT'] ) || getenv( 'MU_AUTH_ENABLE' ) ) {
 }
 
 /**
+ * Add a role using the WordPress VIP helper when available.
+ *
+ * @param string $role The role name.
+ * @param string $display_name The role display name.
+ * @param array  $capabilities The role capabilities.
+ * @return WP_Role|void
+ */
+function mu_auth_add_role( $role, $display_name, $capabilities ) {
+	if ( function_exists( 'wpcom_vip_add_role' ) ) {
+		return wpcom_vip_add_role( $role, $display_name, $capabilities );
+	}
+
+	// Keep the plugin functional outside WordPress VIP environments.
+	return add_role( // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_role
+		$role,
+		$display_name,
+		$capabilities
+	);
+}
+
+/**
  * Gravity Forms Viewer Role functionality for MU Auth plugin.
  *
  * @package MU_Auth
@@ -433,7 +463,7 @@ function mu_auth_create_gravity_forms_viewer_role() {
 	}
 
 	// Add the custom role with minimal capabilities.
-	add_role(
+	mu_auth_add_role(
 		'gravity_forms_viewer',
 		'Gravity Forms Viewer',
 		array(
@@ -659,7 +689,7 @@ function mu_auth_create_profiles_manager_role() {
 	}
 
 	// Add the custom role with employee and department management capabilities.
-	add_role(
+	mu_auth_add_role(
 		'profiles_manager',
 		'Profiles Manager',
 		array(
@@ -994,7 +1024,7 @@ function mu_auth_create_forms_profiles_manager_role() {
 		return;
 	}
 
-	add_role(
+	mu_auth_add_role(
 		'forms_profiles_manager',
 		'Forms & Profiles Manager',
 		array(
