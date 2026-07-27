@@ -30,7 +30,7 @@ The plugin consists of three PHP files:
 
 ### Authentication Flow
 
-1. `mu_auth_check_login()` fires on WordPress `init` hook — only when `$_ENV['PANTHEON_ENVIRONMENT']` is set or `MU_AUTH_ENABLE=true`.
+1. `mu_auth_check_login()` fires on WordPress `init` hook — hooked on `plugins_loaded` only when `mu_auth_is_enabled()` returns true, i.e. the `VIP_GO_APP_ENVIRONMENT` constant is defined (WordPress VIP), `$_ENV['PANTHEON_ENVIRONMENT']` is set (Pantheon), or `MU_AUTH_ENABLE=true`. Overridable via the `mu_auth_enabled` filter.
 2. If the user is not authenticated and on a login/admin page, redirects to CAS login.
 3. CAS redirects back with a `ticket` query parameter; `mu_auth_validate_cas_ticket()` calls `/cas/p3/serviceValidate`, parses the XML response.
 4. `mu_auth_login_user()` looks up or creates the WordPress user, checks them against the `auth_users` ACF field, assigns the appropriate role, sets auth cookies, and redirects.

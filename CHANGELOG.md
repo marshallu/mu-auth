@@ -4,6 +4,15 @@
 
 ---
 
+## [1.1.5] - 2026-07-27
+
+### Added
+
+- **WordPress VIP environment detection** — CAS authentication now auto-enables on WordPress VIP by checking for the platform-defined `VIP_GO_APP_ENVIRONMENT` constant, alongside the existing Pantheon (`PANTHEON_ENVIRONMENT`) and `MU_AUTH_ENABLE` checks. Supports running Pantheon and VIP side by side during the migration.
+- **`mu_auth_enabled` filter** — the host check now lives in `mu_auth_is_enabled()` and can be overridden from a mu-plugin to force CAS on or off on a host that is not auto-detected.
+
+---
+
 ## [1.1.2] - 2026-03-11
 
 ### Fixed

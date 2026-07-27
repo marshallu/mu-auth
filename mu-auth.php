@@ -5,7 +5,7 @@
  * Description:     Marshall University SSO authentication for WordPress
  * Author:          Christopher McComas
  * Author URI:      https://www.marshall.edu
- * Version:         1.1.4
+ * Version:         1.1.5
  *
  * @package         MU_Auth
  */
@@ -419,9 +419,39 @@ function mu_auth_check_login() {
 	}
 }
 
-if ( isset( $_ENV['PANTHEON_ENVIRONMENT'] ) || getenv( 'MU_AUTH_ENABLE' ) ) {
-	add_action( 'init', 'mu_auth_check_login' );
+/**
+ * Determine whether CAS authentication should be active.
+ *
+ * Auto-enables on WordPress VIP (the platform defines VIP_GO_APP_ENVIRONMENT as a
+ * constant) and on Pantheon (which exposes PANTHEON_ENVIRONMENT in the environment),
+ * or anywhere MU_AUTH_ENABLE is set.
+ *
+ * @return bool
+ */
+function mu_auth_is_enabled() {
+	$enabled = defined( 'VIP_GO_APP_ENVIRONMENT' )
+		|| isset( $_ENV['PANTHEON_ENVIRONMENT'] )
+		|| getenv( 'MU_AUTH_ENABLE' );
+
+	/**
+	 * Filters whether CAS authentication is active.
+	 *
+	 * Add this filter from a mu-plugin to force CAS on or off on a host that is
+	 * not auto-detected.
+	 *
+	 * @param bool $enabled Whether CAS authentication is enabled.
+	 */
+	return (bool) apply_filters( 'mu_auth_enabled', $enabled );
 }
+
+add_action(
+	'plugins_loaded',
+	function () {
+		if ( mu_auth_is_enabled() ) {
+			add_action( 'init', 'mu_auth_check_login' );
+		}
+	}
+);
 
 /**
  * Add a role using the WordPress VIP helper when available.
