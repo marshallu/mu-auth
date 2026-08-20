@@ -76,8 +76,10 @@ add_action( 'wp_logout', 'mu_auth_logout_redirect' );
  */
 function mu_auth_is_wordpress_admin_login() {
 	$current_url = trim( $_SERVER['REQUEST_URI'], '/' ); // phpcs:ignore
+	$is_evergreen_login = array_key_exists( 'evergreen', $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
 	return (
-		( strpos( $current_url, 'wp-login.php' ) !== false || strpos( $current_url, 'evergreen' ) !== false )
+		( strpos( $current_url, 'wp-login.php' ) !== false || $is_evergreen_login )
 		&& strpos( $current_url, 'action=logout' ) === false
 		&& strpos( $current_url, 'action=postpass' ) === false
 	);
