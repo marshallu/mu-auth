@@ -5,7 +5,7 @@
  * Description:     Marshall University SSO authentication for WordPress
  * Author:          Christopher McComas
  * Author URI:      https://www.marshall.edu
- * Version:         1.1.5
+ * Version:         1.1.6
  *
  * @package         MU_Auth
  */

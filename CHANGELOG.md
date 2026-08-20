@@ -4,6 +4,14 @@
 
 ---
 
+## [1.1.6] - 2026-08-20
+
+### Fixed
+
+- **Evergreen login detection** — detect the `evergreen` query parameter explicitly instead of matching it anywhere in the request URL.
+
+---
+
 ## [1.1.5] - 2026-07-27
 
 ### Added
