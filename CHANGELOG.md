@@ -4,6 +4,26 @@
 
 ---
 
+## [1.1.7] - 2026-10-05
+
+### Fixed
+
+- **Logout and unauthorized-user redirect loops on VIP.** The `www.marshall.edu` logout host is now an allowed redirect host. Before, `wp_safe_redirect()` fell back to `admin_url()` on other domains and sent users straight back through CAS.
+- **CAS ticket validation timeout.** Validation now uses a 3s timeout. On VIP, the circuit breaker also allows 3 failures and a 20s retry window instead of the 1s default. A slow CAS response no longer causes login loops.
+- **Unknown permission levels no longer grant Administrator.** An unrecognized level now maps to Editor. A super user with no `auth_users` row still gets Administrator, and the undefined-key warning is gone.
+- **CAS no longer turns on in `vip dev-env`.** VIP detection now uses `marshall_is_hosted()` when it's available and otherwise skips the `local` environment.
+
+### Changed
+
+- **VIP forced two-factor is off for CAS logins**, because CAS already enforces MFA. Return `true` from the `mu_auth_vip_two_factor_forced` filter to keep it on.
+- **Employee capabilities are granted with `wpcom_vip_add_role_caps()`** when it's available: one write per role instead of 16.
+
+### Removed
+
+- **Activation and deactivation hooks.** They never run for a mu-plugin or for a plugin loaded with `wpcom_vip_load_plugin()`.
+
+---
+
 ## [1.1.6] - 2026-08-20
 
 ### Fixed

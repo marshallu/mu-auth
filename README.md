@@ -22,7 +22,7 @@ Or place the plugin in your `wp-content/plugins/` directory and activate it.
 
 CAS authentication activates automatically on supported hosts:
 
-- **WordPress VIP** — when the platform-defined `VIP_GO_APP_ENVIRONMENT` constant is present (all environment types, including `local`)
+- **WordPress VIP** — on hosted environments: `marshall_is_hosted()` when the VIP repo defines it, otherwise when the `VIP_GO_APP_ENVIRONMENT` constant is present and isn't `local` (so `vip dev-env` stays off)
 - **Pantheon** — when `PANTHEON_ENVIRONMENT` is set in the environment
 
 On any other host, enable it with an environment variable:
@@ -30,6 +30,8 @@ On any other host, enable it with an environment variable:
 ```bash
 MU_AUTH_ENABLE=true
 ```
+
+When CAS is active, the plugin also turns off VIP's forced two-factor (`wpcom_vip_is_two_factor_forced`), because CAS already enforces MFA. To keep VIP 2FA, return `true` from the `mu_auth_vip_two_factor_forced` filter.
 
 Note that this only gates the CAS login redirect. The custom roles, their admin restrictions, the settings page, and the logout redirect are always registered.
 

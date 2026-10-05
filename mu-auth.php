@@ -5,7 +5,7 @@
  * Description:     Marshall University SSO authentication for WordPress
  * Author:          Christopher McComas
  * Author URI:      https://www.marshall.edu
- * Version:         1.1.6
+ * Version:         1.1.7
  *
  * @package         MU_Auth
  */
@@ -20,13 +20,17 @@ const MUCASAUTH_CAS_ATTRIBUTE_LASTNAME  = 'lastname';
 const MUCASAUTH_CAS_ATTRIBUTE_EMAIL     = 'email';
 
 /**
- * Allow redirects to the CAS host.
+ * Allow redirects to the CAS host and the logout redirect host.
+ *
+ * Without the logout host, wp_safe_redirect() falls back to admin_url() on any
+ * other domain, which sends logged-out and unauthorized users back through CAS.
  *
  * @param string[] $hosts Allowed redirect hosts.
  * @return string[]
  */
 function mu_auth_allowed_redirect_hosts( $hosts ) {
 	$hosts[] = wp_parse_url( MUCASAUTH_CAS_HOST, PHP_URL_HOST );
+	$hosts[] = wp_parse_url( MUCASAUTH_LOGOUT_REDIRECT_URL, PHP_URL_HOST );
 	return $hosts;
 }
 add_filter( 'allowed_redirect_hosts', 'mu_auth_allowed_redirect_hosts' );
@@ -39,32 +43,12 @@ require plugin_dir_path( __FILE__ ) . '/acf-fields.php';
 require plugin_dir_path( __FILE__ ) . '/mu-auth-admin.php';
 
 /**
- * Flush rewrites whenever the plugin is activated.
- */
-function mu_auth_activate() {
-	// Required to register plugin rewrite rules after activation.
-	// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.flush_rewrite_rules_flush_rewrite_rules
-	flush_rewrite_rules();
-}
-register_activation_hook( __FILE__, 'mu_auth_activate' );
-
-/**
- * Flush rewrites whenever the plugin is deactivated.
- */
-function mu_auth_deactivate() {
-	// Required to unregister plugin rewrite rules after deactivation.
-	// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.flush_rewrite_rules_flush_rewrite_rules
-	flush_rewrite_rules();
-}
-register_deactivation_hook( __FILE__, 'mu_auth_deactivate' );
-
-/**
  * Redirect the user to the homepage after logging out.
  *
  * @return void
  */
 function mu_auth_logout_redirect() {
-	wp_safe_redirect( 'https://www.marshall.edu' );
+	wp_safe_redirect( MUCASAUTH_LOGOUT_REDIRECT_URL );
 	exit;
 }
 add_action( 'wp_logout', 'mu_auth_logout_redirect' );
@@ -100,7 +84,28 @@ function mu_auth_get_role_from_permissions_level( $permissions_level ) {
 		'Forms & Profiles' => 'forms_profiles_manager',
 	);
 
-	return isset( $role_mapping[ $permissions_level ] ) ? $role_mapping[ $permissions_level ] : 'administrator';
+	return isset( $role_mapping[ $permissions_level ] ) ? $role_mapping[ $permissions_level ] : 'editor';
+}
+
+/**
+ * Get the role to assign a user on this site.
+ *
+ * Users listed in the auth_users field get the role for their permissions level.
+ * Super users with no auth_users row get Administrator. Anyone else falls back to
+ * Editor rather than silently receiving Administrator.
+ *
+ * @param array $selected_user The matching auth_users row, or an empty array.
+ * @param bool  $is_super_user Whether the user is in the mu_auth_super_users list.
+ * @return string The WordPress role name.
+ */
+function mu_auth_get_role_for_user( $selected_user, $is_super_user ) {
+	$permissions_level = $selected_user['permissions_level'] ?? '';
+
+	if ( $permissions_level ) {
+		return mu_auth_get_role_from_permissions_level( $permissions_level );
+	}
+
+	return $is_super_user ? 'administrator' : 'editor';
 }
 
 /**
@@ -127,8 +132,10 @@ function mu_auth_login_user() {
 	 */
 	$supers = apply_filters( 'mu_auth_super_users', array() );
 
+	$is_super_user = in_array( $auth_data['user'], $supers, true );
+
 	// Allow users in $supers array to access site.
-	if ( in_array( $auth_data['user'], $supers, true ) ) {
+	if ( $is_super_user ) {
 		$site_access_allowed = true;
 	}
 
@@ -159,7 +166,7 @@ function mu_auth_login_user() {
 
 	// If no WordPress user is found, create a new WordPress user.
 	if ( ! $user ) {
-		$role = $selected_user['permissions_level'] ? mu_auth_get_role_from_permissions_level( $selected_user['permissions_level'] ) : 'administrator';
+		$role = mu_auth_get_role_for_user( $selected_user, $is_super_user );
 		$user = mu_auth_create_user(
 			$auth_data['user'],
 			$auth_data['attributes'][ MUCASAUTH_CAS_ATTRIBUTE_FIRSTNAME ],
@@ -177,7 +184,7 @@ function mu_auth_login_user() {
 
 	// Add WordPress user to blog/site if needed.
 	if ( ! is_user_member_of_blog( $user->ID, get_current_blog_id() ) && ! is_super_admin( $user->ID ) ) {
-		$role = $selected_user['permissions_level'] ? mu_auth_get_role_from_permissions_level( $selected_user['permissions_level'] ) : 'administrator';
+		$role = mu_auth_get_role_for_user( $selected_user, $is_super_user );
 		add_user_to_blog( get_current_blog_id(), $user->ID, $role );
 	}
 
@@ -283,10 +290,12 @@ function mu_auth_authenticate() {
 function mu_auth_validate_cas_ticket( $cas_host, $cas_path, $ticket ) {
 	$validation_url = mu_auth_get_validation_url( $cas_host, $cas_path, $ticket );
 	if ( function_exists( 'vip_safe_wp_remote_get' ) ) {
-		$data = vip_safe_wp_remote_get( $validation_url );
+		// VIP's defaults (1s timeout, breaker after 3 failures) cause login loops
+		// when CAS is slow. Allow 3s, 3 failures, and a 20s retry window.
+		$data = vip_safe_wp_remote_get( $validation_url, '', 3, 3, 20 );
 	} else {
 		// Keep the plugin functional outside WordPress VIP environments.
-		$data = wp_remote_get( $validation_url ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_remote_get_wp_remote_get
+		$data = wp_remote_get( $validation_url, array( 'timeout' => 3 ) ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_remote_get_wp_remote_get
 	}
 
 	if ( is_wp_error( $data ) ) {
@@ -422,16 +431,32 @@ function mu_auth_check_login() {
 }
 
 /**
+ * Check whether this request is running on a hosted WordPress VIP environment.
+ *
+ * Uses marshall_is_hosted() when the VIP repo provides it. Otherwise checks
+ * VIP_GO_APP_ENVIRONMENT and skips 'local', which vip dev-env also defines.
+ *
+ * @return bool
+ */
+function mu_auth_is_vip_hosted() {
+	if ( function_exists( 'marshall_is_hosted' ) ) {
+		return (bool) marshall_is_hosted();
+	}
+
+	return defined( 'VIP_GO_APP_ENVIRONMENT' ) && 'local' !== VIP_GO_APP_ENVIRONMENT;
+}
+
+/**
  * Determine whether CAS authentication should be active.
  *
- * Auto-enables on WordPress VIP (the platform defines VIP_GO_APP_ENVIRONMENT as a
- * constant) and on Pantheon (which exposes PANTHEON_ENVIRONMENT in the environment),
- * or anywhere MU_AUTH_ENABLE is set.
+ * Auto-enables on hosted WordPress VIP environments (not vip dev-env) and on
+ * Pantheon (which exposes PANTHEON_ENVIRONMENT in the environment), or anywhere
+ * MU_AUTH_ENABLE is set.
  *
  * @return bool
  */
 function mu_auth_is_enabled() {
-	$enabled = defined( 'VIP_GO_APP_ENVIRONMENT' )
+	$enabled = mu_auth_is_vip_hosted()
 		|| isset( $_ENV['PANTHEON_ENVIRONMENT'] )
 		|| getenv( 'MU_AUTH_ENABLE' );
 
@@ -451,6 +476,12 @@ add_action(
 	function () {
 		if ( mu_auth_is_enabled() ) {
 			add_action( 'init', 'mu_auth_check_login' );
+
+			// CAS already enforces MFA, so VIP's forced two-factor would only strip
+			// capabilities from CAS users. Return true from this filter to keep it.
+			if ( ! apply_filters( 'mu_auth_vip_two_factor_forced', false ) ) {
+				add_filter( 'wpcom_vip_is_two_factor_forced', '__return_false' );
+			}
 		}
 	}
 );
@@ -474,6 +505,33 @@ function mu_auth_add_role( $role, $display_name, $capabilities ) {
 		$display_name,
 		$capabilities
 	);
+}
+
+/**
+ * Add capabilities to a role using the WordPress VIP helper when available.
+ *
+ * The VIP helper saves all capabilities in one write instead of one per cap.
+ *
+ * @param string   $role_name    The role name.
+ * @param string[] $capabilities The capabilities to grant.
+ * @return void
+ */
+function mu_auth_add_role_caps( $role_name, $capabilities ) {
+	if ( function_exists( 'wpcom_vip_add_role_caps' ) ) {
+		wpcom_vip_add_role_caps( $role_name, $capabilities );
+		return;
+	}
+
+	$role = get_role( $role_name );
+
+	if ( ! $role ) {
+		return;
+	}
+
+	// Keep the plugin functional outside WordPress VIP environments.
+	foreach ( $capabilities as $capability ) {
+		$role->add_cap( $capability ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.custom_role_add_cap
+	}
 }
 
 /**
@@ -775,25 +833,30 @@ function mu_auth_grant_employee_caps_to_standard_roles() {
 			continue;
 		}
 
-		// Employee post type capabilities.
-		$role->add_cap( 'edit_employee' );
-		$role->add_cap( 'edit_employees' );
-		$role->add_cap( 'edit_others_employees' );
-		$role->add_cap( 'publish_employees' );
-		$role->add_cap( 'read_employee' );
-		$role->add_cap( 'read_private_employees' );
-		$role->add_cap( 'delete_employee' );
-		$role->add_cap( 'delete_employees' );
-		$role->add_cap( 'delete_others_employees' );
-		$role->add_cap( 'delete_private_employees' );
-		$role->add_cap( 'delete_published_employees' );
-		$role->add_cap( 'edit_published_employees' );
+		mu_auth_add_role_caps(
+			$role_name,
+			array(
+				// Employee post type capabilities.
+				'edit_employee',
+				'edit_employees',
+				'edit_others_employees',
+				'publish_employees',
+				'read_employee',
+				'read_private_employees',
+				'delete_employee',
+				'delete_employees',
+				'delete_others_employees',
+				'delete_private_employees',
+				'delete_published_employees',
+				'edit_published_employees',
 
-		// Department taxonomy capabilities.
-		$role->add_cap( 'manage_department' );
-		$role->add_cap( 'edit_department' );
-		$role->add_cap( 'delete_department' );
-		$role->add_cap( 'assign_department' );
+				// Department taxonomy capabilities.
+				'manage_department',
+				'edit_department',
+				'delete_department',
+				'assign_department',
+			)
+		);
 	}
 }
 
