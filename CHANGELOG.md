@@ -4,6 +4,14 @@
 
 ---
 
+## [1.1.8] - 2026-10-13
+
+### Added
+
+- **VIP Support can log in without CAS.** Requests through Automattic's support proxy (VIP's `is_proxied_request()`) get the standard WordPress login. Everyone else still goes to CAS. This replaces the need for a `wp-login.php?normal` bypass, which anyone could use. Return `false` from the `mu_auth_vip_support_bypass` filter to require CAS for proxied requests too.
+
+---
+
 ## [1.1.7] - 2026-10-05
 
 ### Fixed

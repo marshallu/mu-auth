@@ -5,7 +5,7 @@
  * Description:     Marshall University SSO authentication for WordPress
  * Author:          Christopher McComas
  * Author URI:      https://www.marshall.edu
- * Version:         1.1.7
+ * Version:         1.1.8
  *
  * @package         MU_Auth
  */
@@ -416,6 +416,11 @@ function mu_auth_get_service_url_without_ticket() {
  * @return void
  */
 function mu_auth_check_login() {
+	// Let VIP Support through to the standard WordPress login.
+	if ( mu_auth_is_vip_support_request() ) {
+		return;
+	}
+
 	if ( is_admin() && is_user_logged_in() && ( is_user_member_of_blog( get_current_user_id(), get_current_blog_id() ) || is_super_admin() ) ) {
 		return;
 	}
@@ -444,6 +449,28 @@ function mu_auth_is_vip_hosted() {
 	}
 
 	return defined( 'VIP_GO_APP_ENVIRONMENT' ) && 'local' !== VIP_GO_APP_ENVIRONMENT;
+}
+
+/**
+ * Check whether this request came through the WordPress VIP support proxy.
+ *
+ * VIP's is_proxied_request() is only true for requests routed through
+ * Automattic's proxy servers, so VIP Support can use the standard WordPress
+ * login without a guessable query parameter like ?normal.
+ *
+ * @return bool
+ */
+function mu_auth_is_vip_support_request() {
+	$is_proxied = function_exists( 'is_proxied_request' ) && is_proxied_request();
+
+	/**
+	 * Filters whether the request bypasses CAS for VIP Support.
+	 *
+	 * Return false to require CAS for proxied requests too.
+	 *
+	 * @param bool $is_proxied Whether the request came through the VIP proxy.
+	 */
+	return (bool) apply_filters( 'mu_auth_vip_support_bypass', $is_proxied );
 }
 
 /**

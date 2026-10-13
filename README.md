@@ -33,6 +33,14 @@ MU_AUTH_ENABLE=true
 
 When CAS is active, the plugin also turns off VIP's forced two-factor (`wpcom_vip_is_two_factor_forced`), because CAS already enforces MFA. To keep VIP 2FA, return `true` from the `mu_auth_vip_two_factor_forced` filter.
 
+### VIP Support Access
+
+On WordPress VIP, requests routed through Automattic's support proxy (VIP's `is_proxied_request()`) skip CAS and get the standard WordPress login, so VIP Support can reach the dashboard. Everyone else is still sent to CAS. This follows VIP's recommended alternative to a `wp-login.php?normal` bypass, which anyone could use. To require CAS for proxied requests too:
+
+```php
+add_filter( 'mu_auth_vip_support_bypass', '__return_false' );
+```
+
 Note that this only gates the CAS login redirect. The custom roles, their admin restrictions, the settings page, and the logout redirect are always registered.
 
 Once active, configure access via the **Settings > MU Auth Settings** page in the WordPress admin. This requires ACF Pro.
