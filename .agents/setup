@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "[orb setup] Installing PHP 8.3"
+step_started=$SECONDS
+
+php_packages=(php8.3-cli php8.3-mbstring php8.3-xml)
+missing_php_packages=()
+for package in "${php_packages[@]}"; do
+	if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -Fq 'install ok installed'; then
+		missing_php_packages+=("$package")
+	fi
+done
+
+if (( ${#missing_php_packages[@]} > 0 )); then
+	prerequisite_packages=(ca-certificates curl lsb-release)
+	missing_prerequisites=()
+	for package in "${prerequisite_packages[@]}"; do
+		if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -Fq 'install ok installed'; then
+			missing_prerequisites+=("$package")
+		fi
+	done
+
+	if (( ${#missing_prerequisites[@]} > 0 )); then
+		sudo apt-get update
+		sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_prerequisites[@]}"
+	fi
+
+	if [[ ! -f /usr/share/keyrings/debsuryorg-archive-keyring.gpg ]]; then
+		keyring_package="$(mktemp --suffix=.deb)"
+		curl -fsSL https://packages.sury.org/debsuryorg-archive-keyring.deb -o "$keyring_package"
+		sudo DEBIAN_FRONTEND=noninteractive dpkg -i "$keyring_package"
+		rm -f "$keyring_package"
+	fi
+
+	if [[ ! -f /etc/apt/sources.list.d/php.list ]]; then
+		echo "deb [signed-by=/usr/share/keyrings/debsuryorg-archive-keyring.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" |
+			sudo tee /etc/apt/sources.list.d/php.list >/dev/null
+	fi
+
+	sudo apt-get update
+	sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_php_packages[@]}"
+fi
+
+sudo update-alternatives --set php /usr/bin/php8.3 >/dev/null
+echo "[orb setup] PHP ready in $(( SECONDS - step_started ))s"
+
+echo "[orb setup] Installing Composer"
+step_started=$SECONDS
+if ! command -v composer >/dev/null 2>&1; then
+	composer_installer="$(mktemp)"
+	expected_checksum="$(curl -fsSL https://composer.github.io/installer.sig)"
+	curl -fsSL https://getcomposer.org/installer -o "$composer_installer"
+	actual_checksum="$(php -r "echo hash_file('sha384', '$composer_installer');")"
+	if [[ "$actual_checksum" != "$expected_checksum" ]]; then
+		rm -f "$composer_installer"
+		echo "Composer installer checksum verification failed" >&2
+		exit 1
+	fi
+	sudo php "$composer_installer" --quiet --install-dir=/usr/local/bin --filename=composer
+	rm -f "$composer_installer"
+fi
+echo "[orb setup] Composer ready in $(( SECONDS - step_started ))s"
+
+echo "[orb setup] Installing Composer dependencies"
+step_started=$SECONDS
+composer install --no-interaction --prefer-dist --no-progress
+echo "[orb setup] Composer dependencies ready in $(( SECONDS - step_started ))s"
+
+echo "[orb setup] Installing npm dependencies"
+step_started=$SECONDS
+npm ci --no-audit --no-fund
+npx --no-install lefthook install
+echo "[orb setup] npm dependencies ready in $(( SECONDS - step_started ))s"
+
+echo "[orb setup] Complete"
