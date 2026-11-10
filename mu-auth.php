@@ -5,7 +5,7 @@
  * Description:     Marshall University SSO authentication for WordPress
  * Author:          Christopher McComas
  * Author URI:      https://www.marshall.edu
- * Version:         1.1.8
+ * Version:         1.1.9
  *
  * @package         MU_Auth
  */
@@ -36,7 +36,7 @@ function mu_auth_allowed_redirect_hosts( $hosts ) {
 add_filter( 'allowed_redirect_hosts', 'mu_auth_allowed_redirect_hosts' );
 
 if ( ! class_exists( 'ACF' ) ) {
-	return new WP_Error( 'broke', __( 'Advanced Custom Fields is required for this plugin.', 'mu-moments' ) );
+	return new WP_Error( 'broke', __( 'Advanced Custom Fields is required for this plugin.', 'mu-auth' ) );
 }
 
 require plugin_dir_path( __FILE__ ) . '/acf-fields.php';
@@ -59,13 +59,13 @@ add_action( 'wp_logout', 'mu_auth_logout_redirect' );
  * @return boolean
  */
 function mu_auth_is_wordpress_admin_login() {
-	$current_url = trim( $_SERVER['REQUEST_URI'], '/' ); // phpcs:ignore
+	$current_url = trim( $_SERVER['REQUEST_URI'] ?? '', '/' ); // phpcs:ignore
 	$is_evergreen_login = array_key_exists( 'evergreen', $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 	return (
-		( strpos( $current_url, 'wp-login.php' ) !== false || $is_evergreen_login )
-		&& strpos( $current_url, 'action=logout' ) === false
-		&& strpos( $current_url, 'action=postpass' ) === false
+		( str_contains( $current_url, 'wp-login.php' ) || $is_evergreen_login )
+		&& ! str_contains( $current_url, 'action=logout' )
+		&& ! str_contains( $current_url, 'action=postpass' )
 	);
 }
 
@@ -84,7 +84,7 @@ function mu_auth_get_role_from_permissions_level( $permissions_level ) {
 		'Forms & Profiles' => 'forms_profiles_manager',
 	);
 
-	return isset( $role_mapping[ $permissions_level ] ) ? $role_mapping[ $permissions_level ] : 'editor';
+	return $role_mapping[ $permissions_level ] ?? 'editor';
 }
 
 /**
@@ -151,7 +151,7 @@ function mu_auth_login_user() {
 
 	if ( $site_users && is_array( $site_users ) ) {
 		foreach ( $site_users as $site_user ) {
-			if ( $auth_data['user'] == trim( $site_user['munet'] ) ) { // phpcs:ignore
+			if ( $auth_data['user'] == trim( $site_user['munet'] ?? '' ) ) { // phpcs:ignore
 				$site_access_allowed = true;
 				$selected_user = $site_user; // phpcs:ignore
 			}
@@ -275,7 +275,7 @@ function mu_auth_authenticate() {
 
 	return array(
 		'user'       => $cas_response->authenticationSuccess->user, // phpcs:ignore
-		'attributes' => json_decode( json_encode( $cas_response->authenticationSuccess->attributes ), true ), // phpcs:ignore
+		'attributes' => json_decode( wp_json_encode( $cas_response->authenticationSuccess->attributes ), true ), // phpcs:ignore
 	);
 }
 
@@ -285,7 +285,7 @@ function mu_auth_authenticate() {
  * @param string $cas_host The CAS host.
  * @param string $cas_path The CAS path.
  * @param string $ticket The CAS ticket.
- * @return array
+ * @return object|array Decoded CAS response object, or an empty array on failure.
  */
 function mu_auth_validate_cas_ticket( $cas_host, $cas_path, $ticket ) {
 	$validation_url = mu_auth_get_validation_url( $cas_host, $cas_path, $ticket );
@@ -334,7 +334,7 @@ function mu_auth_get_validation_url( $cas_host, $cas_path, $ticket ) {
  * @return string|boolean
  */
 function mu_auth_get_ticket() {
-	parse_str( $_SERVER['QUERY_STRING'], $query_string_parts ); // phpcs:ignore
+	parse_str( $_SERVER['QUERY_STRING'] ?? '', $query_string_parts ); // phpcs:ignore
 
 	if ( ! isset( $query_string_parts['ticket'] ) ) {
 		return false;
@@ -350,7 +350,7 @@ function mu_auth_get_ticket() {
  */
 function mu_auth_is_ticket_present() {
 	$service_url = mu_auth_get_service_url();
-	return strpos( urldecode( $service_url ), 'ticket=' );
+	return str_contains( urldecode( $service_url ), 'ticket=' );
 }
 
 /**
@@ -369,7 +369,7 @@ function mu_auth_get_service_url() {
 		$scheme = 'https';
 	}
 
-	$current_url = $scheme . '://' . trim($_SERVER['HTTP_HOST'], '/') . '/' . ltrim($_SERVER['REQUEST_URI'], '/'); // phpcs:ignore
+	$current_url = $scheme . '://' . trim( $_SERVER['HTTP_HOST'] ?? '', '/' ) . '/' . ltrim( $_SERVER['REQUEST_URI'] ?? '', '/' ); // phpcs:ignore
 
 	return rawurlencode( urldecode( $current_url ) );
 }

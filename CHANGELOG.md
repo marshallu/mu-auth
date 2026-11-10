@@ -4,6 +4,19 @@
 
 ---
 
+## [1.1.9] - 2026-11-10
+
+### Fixed
+
+- **PHP 8.4 deprecation notices.** Missing `$_SERVER` values (`REQUEST_URI`, `QUERY_STRING`, `HTTP_HOST`) and `auth_users` rows without a NetID no longer pass `null` to string functions, for example during WP-CLI and cron requests. Behavior is unchanged.
+
+### Changed
+
+- Use `str_contains()`, `??`, and `wp_json_encode()` in place of older patterns. Behavior is unchanged.
+- Corrected the text domain (`mu-auth`) and the `mu_auth_validate_cas_ticket()` return type docblock.
+
+---
+
 ## [1.1.8] - 2026-10-13
 
 ### Added
